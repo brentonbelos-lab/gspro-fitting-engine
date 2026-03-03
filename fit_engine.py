@@ -16,7 +16,7 @@ CANON_COLS = {
     # distances
     "carry": ["Carry", "Carry Dist (yd)", "Carry Dist", "CarryDist", "Carry Distance", "Carry Distance (yd)"],
     "total": ["TotalDistance", "Total Dist (yd)", "Total Dist", "TotalDist", "Total", "Total Distance (yd)"],
-    "offline": ["Offline", "Offline (yd)", "LeftRight", "Dispersion"],
+    "offline": ["Offline", "Offline (yd)", "offline", "LeftRight", "Dispersion"],
 
     # speed
     "ball_speed": ["BallSpeed", "Ball Speed (mph)", "Ball Speed", "ball_speed"],

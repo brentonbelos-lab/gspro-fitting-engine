@@ -415,8 +415,19 @@ def recommend_for_club(summary: ClubSummary) -> List[Recommendation]:
 def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
     df = _canonicalize_columns(df_raw.copy())
 
+    # Clean DistanceToPin like "181.28 yds" -> 181.28 (optional field)
+    if "DistanceToPin" in df.columns:
+        df["DistanceToPin"] = (
+            df["DistanceToPin"].astype(str)
+            .str.replace("yds", "", regex=False)
+            .str.replace("yd", "", regex=False)
+            .str.strip()
+        )
+        df["DistanceToPin"] = pd.to_numeric(df["DistanceToPin"], errors="coerce")
+
     numeric_cols = [
-        "carry", "total", "offline", "ball_speed", "club_speed", "smash",
+        "carry", "total", "offline",
+        "ball_speed", "club_speed", "smash",
         "vla", "hla", "peak_height", "descent",
         "spin", "spin_axis", "side_spin",
         "aoa", "path", "face_to_path", "face_to_target",
@@ -448,10 +459,13 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         factors = limiting_factors(summary)
         recs = recommend_for_club(summary)
 
-        club_results[bucket] = ClubAnalysis(summary=summary, limiting_factors=factors, recommendations=recs)
+        club_results[bucket] = ClubAnalysis(
+            summary=summary,
+            limiting_factors=factors,
+            recommendations=recs,
+        )
 
     return SessionResult(club_results=club_results)
-
 
 def session_to_dict(result: SessionResult) -> Dict[str, object]:
     """Convert dataclasses to JSON-serializable dict."""

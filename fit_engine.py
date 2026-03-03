@@ -24,8 +24,8 @@ CANON_COLS = {
     "smash": ["SmashFactor", "Smash Factor", "Smash", "smash"],
 
     # launch
-    "vla": ["VLA", "LaunchAngle", "VerticalLaunch", "launch"],
-    "hla": ["HLA", "HorizontalLaunch", "StartLine"],
+    "vla": ["VLA", "Vla", "LaunchAngle", "VerticalLaunch", "launch"],
+    "hla": ["HLA", "Hla", "HorizontalLaunch", "StartLine"],
 
     # height / landing
     "peak_height": ["PeakHeight", "Peak Height (yd)", "Peak Height", "Apex"],

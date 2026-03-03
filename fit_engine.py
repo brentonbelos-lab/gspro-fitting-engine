@@ -14,49 +14,36 @@ import pandas as pd
 
 CANON_COLS = {
     # distances
-    "carry": [
-        "Carry", "Carry Dist", "CarryDist", "Carry Distance", "carry",
-        "Carry Dist (yd)", "Carry Distance (yd)"
-    ],
-    "total": [
-        "TotalDistance", "Total Dist", "TotalDist", "Total", "total",
-        "Total Dist (yd)", "Total Distance (yd)"
-    ],
-    "offline": [
-        "Offline", "offline", "LeftRight", "Dispersion",
-        "Offline (yd)"
-    ],
+    "carry": ["Carry", "Carry Dist (yd)", "Carry Dist", "CarryDist", "Carry Distance", "Carry Distance (yd)"],
+    "total": ["TotalDistance", "Total Dist (yd)", "Total Dist", "TotalDist", "Total", "Total Distance (yd)"],
+    "offline": ["Offline", "Offline (yd)", "LeftRight", "Dispersion"],
 
     # speed
-    "ball_speed": [
-        "BallSpeed", "Ball Speed", "ball_speed",
-        "Ball Speed (mph)"
-    ],
-    "club_speed": [
-        "ClubSpeed", "Club Speed", "club_speed",
-        "Club Speed (mph)"
-    ],
-    "smash": ["SmashFactor", "Smash", "smash"],
+    "ball_speed": ["BallSpeed", "Ball Speed (mph)", "Ball Speed", "ball_speed"],
+    "club_speed": ["ClubSpeed", "Club Speed (mph)", "Club Speed", "club_speed"],
+    "smash": ["SmashFactor", "Smash Factor", "Smash", "smash"],
 
     # launch
-    "vla": ["VLA", "LaunchAngle", "VerticalLaunch", "launch", "VLA"],
-    "hla": ["HLA", "HorizontalLaunch", "StartLine", "HLA"],
-    "peak_height": ["PeakHeight", "Peak Height", "Apex", "Peak Height (yd)"],
-    "descent": ["Decent", "Descent", "DescentAngle", "LandingAngle", "Desc Angle"],
+    "vla": ["VLA", "LaunchAngle", "VerticalLaunch", "launch"],
+    "hla": ["HLA", "HorizontalLaunch", "StartLine"],
+
+    # height / landing
+    "peak_height": ["PeakHeight", "Peak Height (yd)", "Peak Height", "Apex"],
+    "descent": ["Decent", "Desc Angle", "Descent", "DescentAngle", "LandingAngle", "DescAngle"],
 
     # spin
-    "spin": ["BackSpin", "Spin", "Back Spin", "TotalSpin", "Back Spin"],
-    "spin_axis": ["rawSpinAxis", "Spin Axis", "SpinAxis", "Axis", "Spin Axis"],
+    "spin": ["BackSpin", "Back Spin", "Spin", "TotalSpin"],
+    "spin_axis": ["rawSpinAxis", "Spin Axis", "SpinAxis", "Axis"],
     "side_spin": ["SideSpin", "Side Spin"],
 
     # delivery
-    "aoa": ["AoA", "Club AoA", "AngleOfAttack", "Club AoA"],
-    "path": ["Path", "Club Path", "Club Path"],
-    "face_to_path": ["FaceToPath", "Face to Path", "F2P", "Face to Path"],
-    "face_to_target": ["FaceToTarget", "Face to Target", "FaceAngle", "Face to Target"],
+    "aoa": ["AoA", "Club AoA", "AngleOfAttack"],
+    "path": ["Path", "Club Path"],
+    "face_to_path": ["FaceToPath", "Face to Path", "F2P"],
+    "face_to_target": ["FaceToTarget", "Face to Target", "FaceAngle"],
 
     # identifiers
-    "club": ["Club", "Club Name", "ClubName", "club", "Club Name"],
+    "club": ["Club", "Club Name", "ClubName", "club"],
 }
 
 TARGETS = {

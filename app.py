@@ -22,7 +22,6 @@ if uploaded is None:
 # Read CSV
 df = pd.read_csv(uploaded)
 st.write("Detected Columns:")
-st.write(list(df.columns))
 if show_raw:
     st.subheader("Raw Data (first 200 rows)")
     st.dataframe(df.head(200), use_container_width=True)

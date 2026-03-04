@@ -483,6 +483,8 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         )
 
     return SessionResult(club_results=club_results)
+
+
 def session_to_dict(result: SessionResult) -> Dict[str, object]:
     """
     Convert dataclasses to JSON-serializable dict for Streamlit.

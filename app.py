@@ -319,9 +319,9 @@ else:
 else:
     st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
 
-# Hybrids (bulletproof slider)
 # Hybrids (bulletproof slider + state clamp)
 if len(detected_hy) > 0:
+
     st.subheader("Hybrids")
 
     max_hy = min(6, len(detected_hy))
@@ -329,6 +329,7 @@ if len(detected_hy) > 0:
 
     hy_slider_key = "n_hy"
 
+    # Clamp stored slider value into valid range
     if hy_slider_key in st.session_state:
         st.session_state[hy_slider_key] = int(
             max(1, min(max_hy, st.session_state[hy_slider_key]))
@@ -350,12 +351,9 @@ if len(detected_hy) > 0:
             key=f"hy_slot_{i}"
         )
         hosel_block(club_choice, f"Hybrid: {club_choice}")
+
 else:
-    st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
-    for i in range(n_hy):
-        club_choice = st.selectbox(f"Hybrid slot {i+1}: which club?", detected_hy, key=f"hy_slot_{i}")
-        hosel_block(club_choice, f"Hybrid: {club_choice}")
-else:
+
     st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
 
 # -----------------------------

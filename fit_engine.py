@@ -440,17 +440,18 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         "spin", "spin_axis", "side_spin",
         "aoa", "path", "face_to_path", "face_to_target",
     ]
-for col in numeric_cols:
-    if col in df.columns:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace("yds", "", regex=False)
-            .str.replace("yd", "", regex=False)
-            .str.replace(",", "", regex=False)
-            .str.strip()
-        )
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace("yds", "", regex=False)
+                .str.replace("yd", "", regex=False)
+                .str.replace(",", "", regex=False)
+                .str.strip()
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     if "club" not in df.columns:
         raise ValueError("CSV missing club column (could not find Club/Club Name).")
@@ -482,30 +483,3 @@ for col in numeric_cols:
         )
 
     return SessionResult(club_results=club_results)
-
-def session_to_dict(result: SessionResult) -> Dict[str, object]:
-    """Convert dataclasses to JSON-serializable dict."""
-    out: Dict[str, object] = {"clubs": {}}
-    for club, analysis in result.club_results.items():
-        out["clubs"][club] = {
-            "summary": {
-                "club": analysis.summary.club,
-                "n_total": analysis.summary.n_total,
-                "n_used": analysis.summary.n_used,
-                "confidence": analysis.summary.confidence,
-                "metrics": analysis.summary.metrics,
-                "variability": analysis.summary.variability,
-            },
-            "limiting_factors": analysis.limiting_factors,
-            "recommendations": [
-                {
-                    "priority": r.priority,
-                    "title": r.title,
-                    "rationale": r.rationale,
-                    "confidence": r.confidence,
-                    "spec": r.spec,
-                }
-                for r in analysis.recommendations
-            ],
-        }
-    return out

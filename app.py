@@ -189,6 +189,13 @@ for tab, club_code in zip(tabs, sorted(clubs.keys())):
             else:
                 st.info("No variability metrics available yet.")
 
+        what_first = club_data.get("what_to_change_first", {}) or {}
+        badge = what_first.get("badge", "—")
+        why = what_first.get("why", "")
+
+        st.markdown("### What to change first")
+        st.info(f"**{badge}**\n\n{why}")
+
         with right:
             st.markdown("### Limiting Factors")
             if limiting:

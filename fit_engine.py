@@ -123,31 +123,27 @@ def _to_numeric_safe(s: pd.Series) -> pd.Series:
 
 def _to_numeric_lr(series: pd.Series) -> pd.Series:
     """
-    Convert strings like:
-      '19.8 R' -> 19.8
-      '14.0 L' -> -14.0
-      '9.4°'   -> 9.4
-      '4.0° L' -> -4.0
+    Robust parse for GSPro fields that may include directions/units.
+    Examples:
+      '11.4 R'     ->  11.4
+      '14.0 L'     -> -14.0
+      '2.6° R'     ->  2.6
+      '0.8° I-O'   ->  0.8
+      '4.1° U'     ->  4.1
+      '40.1°'      -> 40.1
     """
     s = series.astype(str).str.strip()
 
-    # remove degree symbol
-    s = s.str.replace("°", "", regex=False)
-
-    # detect Left
+    # Determine sign: treat explicit ' L' or 'L ' or trailing 'L' as left (negative)
     is_left = s.str.contains(r"(^L\b|\bL$|\bL\b)", regex=True)
 
-    # strip L/R letters
-    s = s.str.replace(r"\b[LR]\b", "", regex=True)   # standalone L/R
-    s = s.str.replace("L", "", regex=False)
-    s = s.str.replace("R", "", regex=False)
+    # Remove commas in thousands (just in case)
+    s = s.str.replace(",", "", regex=False)
 
-    # remove commas and extra spaces
-    s = s.str.replace(",", "", regex=False).str.strip()
+    # Extract the first numeric value in the string (handles degrees and extra tokens)
+    num = s.str.extract(r"([-+]?\d*\.?\d+)", expand=False)
+    num = pd.to_numeric(num, errors="coerce")
 
-    num = pd.to_numeric(s, errors="coerce")
-
-    # apply sign for left
     num = np.where(is_left, -num, num)
     return pd.Series(num, index=series.index)
 

@@ -483,7 +483,7 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
             df[col] = pd.to_numeric(df[col], errors="coerce")
             
     # Fix columns that may include 'L'/'R' or degree symbols in GSPro exports
-    for col in ["offline", "hla", "spin_axis", "face_to_target", "vla"]:
+    for col in ["offline", "hla", "spin_axis", "face_to_target", "face_to_path", "vla"]:
         if col in df.columns:
             df[col] = _to_numeric_lr(df[col])
 

@@ -216,7 +216,7 @@ with st.sidebar:
     st.divider()
     st.header("Options")
     show_raw = st.checkbox("Show raw tables", value=False)
-    min_shots = st.slider("Min shots per bucket", 3, 20, 5, 1)
+    min_shots = st.slider("Min shots per Club", 10, 50, 10, 1)
 
 if not uploaded:
     st.info("Upload a GSPro CSV to begin.")

@@ -101,12 +101,21 @@ def _find_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
 
 
 def _canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    # Strip whitespace from original headers first
+    df.columns = [c.strip() for c in df.columns]
+
     rename = {}
     for canon, candidates in CANON_COLS.items():
         col = _find_col(df, candidates)
         if col is not None:
             rename[col] = canon
-    return df.rename(columns=rename)
+
+    df = df.rename(columns=rename)
+
+    # Final strip (just in case)
+    df.columns = [c.strip() for c in df.columns]
+
+    return df
 
 
 def _to_numeric_safe(s: pd.Series) -> pd.Series:

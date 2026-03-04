@@ -1,29 +1,43 @@
-import pandas as pd
-import numpy as np
+# fit_engine.py — FitCaddie (GSPro Club Fitting Engine)
+# Drop-in replacement file. Delete your current fit_engine.py and paste this whole file.
+
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 
 
-# =========================
-# Data structures
-# =========================
+# ============================================================
+# Data models
+# ============================================================
 
 @dataclass
 class ClubSummary:
-    club: str
+    club: str                 # "DR", "3W", "HY"
     n_total: int
     n_used: int
-    confidence: str
-    metrics: Dict[str, float]
-    variability: Dict[str, float]
+    confidence: str           # "LOW" | "MED" | "HIGH"
+    metrics: Dict[str, Any]
+    variability: Dict[str, Any]
+
+
+@dataclass
+class Recommendation:
+    priority: int
+    title: str
+    rationale: str
+    confidence: str           # "LOW" | "MED" | "HIGH"
+    spec: Dict[str, Any]
 
 
 @dataclass
 class ClubAnalysis:
     summary: ClubSummary
     limiting_factors: List[str]
-    recommendations: List[Dict[str, Any]]
-    what_to_change_first: Dict[str, Any]
+    recommendations: List[Recommendation]
 
 
 @dataclass
@@ -31,106 +45,175 @@ class SessionResult:
     club_results: Dict[str, ClubAnalysis]
 
 
-# =========================
-# Column canonicalization
-# =========================
+# ============================================================
+# Titleist compatibility notes (for UI later)
+# ============================================================
 
-CANON_MAP = {
-    # Club identity
-    "Club Name": "club",
-    "Club": "club",
-
-    # Speeds / distance
-    "Club Speed (mph)": "club_speed",
-    "Ball Speed (mph)": "ball_speed",
-    "Carry Dist (yd)": "carry",
-    "Total Dist (yd)": "total",
-
-    # Direction / flight
-    "Offline (yd)": "offline",
-    "Peak Height (yd)": "peak_height",
-    "Desc Angle": "descent",
-    "HLA": "hla",
-    "VLA": "vla",
-
-    # Spin / delivery
-    "Back Spin": "spin",
-    "Spin Axis": "spin_axis",
-    "Club AoA": "aoa",
-    "Club Path": "path",
-    "Face to Path": "face_to_path",
-    "Face to Target": "face_to_target",
+TITLEIST_COMPATIBILITY = {
+    "driver_shafts_interchangeable": ["GT", "TSR", "TSi", "TS", "917", "915", "913", "910"],
+    "fairway_shafts_interchangeable": ["GT", "TSR", "TSi", "TS", "917", "915", "913"],
+    "surefit_driver_fairway_step_deg": 0.75,
+    "surefit_hybrid_step_deg": 1.0,
 }
 
 
-def _canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
+# ============================================================
+# Titleist SureFit tables (from your charts)
+# Values = (loft_change_deg, lie_change_deg) where upright is +
+# ============================================================
 
-    # normalize headers aggressively
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.replace(" ", "_")
-        .str.replace("(", "")
-        .str.replace(")", "")
-        .str.replace("-", "_")
-        .str.lower()
-    )
+# DRIVER / FAIRWAY (RIGHT HAND)
+SUREFIT_DRIVER_FW_RH: Dict[str, Tuple[float, float]] = {
+    "A1": (0.0, 0.0),
+    "A2": (0.0, 1.5),
+    "A3": (1.5, 1.5),
+    "A4": (1.5, 0.0),
 
-    rename_map = {
-        "club_name": "club",
-        "club": "club",
+    "B1": (0.0, -0.75),
+    "B2": (0.0, 0.75),
+    "B3": (1.5, 0.75),
+    "B4": (1.5, -0.75),
 
-        "club_speed_mph": "club_speed",
-        "ball_speed_mph": "ball_speed",
+    "C1": (-0.75, -0.75),
+    "C2": (-0.75, 0.75),
+    "C3": (0.75, 0.75),
+    "C4": (0.75, -0.75),
 
-        "carry_dist_yd": "carry",
-        "total_dist_yd": "total",
+    "D1": (-0.75, 0.0),
+    "D2": (-0.75, 1.5),
+    "D3": (0.75, 1.5),
+    "D4": (0.75, 0.0),
+}
 
-        "offline_yd": "offline",
-        "peak_height_yd": "peak_height",
+# DRIVER / FAIRWAY (LEFT HAND)
+SUREFIT_DRIVER_FW_LH: Dict[str, Tuple[float, float]] = {
+    "A1": (0.75, 0.0),
+    "A2": (0.75, 1.5),
+    "A3": (-0.75, 1.5),
+    "A4": (-0.75, 0.0),
 
-        "desc_angle": "descent",
+    "B1": (0.75, -0.75),
+    "B2": (0.75, 0.75),
+    "B3": (-0.75, 0.75),
+    "B4": (-0.75, -0.75),
 
-        "hla": "hla",
-        "vla": "vla",
+    "C1": (1.5, -0.75),
+    "C2": (1.5, 0.75),
+    "C3": (0.0, 0.75),
+    "C4": (0.0, -0.75),
 
-        "back_spin": "spin",
-        "spin_axis": "spin_axis",
+    "D1": (1.5, 0.0),
+    "D2": (1.5, 1.5),
+    "D3": (0.0, 1.5),
+    "D4": (0.0, 0.0),
+}
 
-        "club_aoa": "aoa",
-        "club_path": "path",
+# HYBRID (RIGHT HAND) — 1° increments
+SUREFIT_HYBRID_RH: Dict[str, Tuple[float, float]] = {
+    "A1": (0.0, 0.0),
+    "A2": (0.0, 2.0),
+    "A3": (2.0, 2.0),
+    "A4": (2.0, 0.0),
 
-        "face_to_path": "face_to_path",
-        "face_to_target": "face_to_target",
-    }
+    "B1": (0.0, -1.0),
+    "B2": (0.0, 1.0),
+    "B3": (2.0, 1.0),
+    "B4": (2.0, -1.0),
 
-    df = df.rename(columns=rename_map)
+    "C1": (-1.0, -1.0),
+    "C2": (-1.0, 1.0),
+    "C3": (1.0, 1.0),
+    "C4": (1.0, -1.0),
 
-    return df
-    rename = {src: dst for src, dst in CANON_MAP.items() if src in df.columns}
-    df = df.rename(columns=rename)
+    "D1": (-1.0, 0.0),
+    "D2": (-1.0, 2.0),
+    "D3": (1.0, 2.0),
+    "D4": (1.0, 0.0),
+}
 
-    # Also allow already-canonical headers (some exports/tools do this)
-    # Normalize common variants:
-    lower = {c.lower(): c for c in df.columns}
-    variants = {
-        "club_name": "club",
-        "clubspeed": "club_speed",
-        "ballspeed": "ball_speed",
-        "carrydist": "carry",
-        "totaldist": "total",
-    }
-    for k, v in variants.items():
-        if k in lower and v not in df.columns:
-            df = df.rename(columns={lower[k]: v})
+# HYBRID (LEFT HAND) — 1° increments
+SUREFIT_HYBRID_LH: Dict[str, Tuple[float, float]] = {
+    "A1": (1.0, 0.0),
+    "A2": (1.0, 2.0),
+    "A3": (-1.0, 2.0),
+    "A4": (-1.0, 0.0),
 
-    return df
+    "B1": (1.0, -1.0),
+    "B2": (1.0, 1.0),
+    "B3": (-1.0, 1.0),
+    "B4": (-1.0, -1.0),
+
+    "C1": (2.0, -1.0),
+    "C2": (2.0, 1.0),
+    "C3": (0.0, 1.0),
+    "C4": (0.0, -1.0),
+
+    "D1": (2.0, 0.0),
+    "D2": (2.0, 2.0),
+    "D3": (0.0, 2.0),
+    "D4": (0.0, 0.0),
+}
 
 
-# =========================
+# ============================================================
 # Parsing helpers
-# =========================
+# ============================================================
+
+def _to_numeric_safe(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _to_numeric_lr(series: pd.Series) -> pd.Series:
+    """
+    Convert strings like:
+      '19.8 R' -> 19.8
+      '14.0 L' -> -14.0
+      '9.4°'   -> 9.4
+      '4.0° L' -> -4.0
+      '0.8° I-O' -> 0.8  (we ignore I-O/O-I direction tags)
+    """
+    s = series.astype(str).str.strip()
+
+    # remove known non-numeric tokens
+    s = s.str.replace("°", "", regex=False)
+    s = s.str.replace("yds", "", regex=False).str.replace("yd", "", regex=False)
+    s = s.str.replace(",", "", regex=False)
+
+    # identify Left marker at end or standalone
+    is_left = s.str.contains(r"(^L\b|\bL$|\bL\b)", regex=True)
+
+    # strip common direction tokens
+    s = s.str.replace(r"\b[LR]\b", "", regex=True)
+    s = s.str.replace("L", "", regex=False)
+    s = s.str.replace("R", "", regex=False)
+
+    # strip face/path direction labels like I-O, O-I
+    s = s.str.replace("I-O", "", regex=False)
+    s = s.str.replace("O-I", "", regex=False)
+
+    s = s.str.strip()
+
+    num = pd.to_numeric(s, errors="coerce")
+    num = np.where(is_left, -num, num)
+    return pd.Series(num, index=series.index)
+
+
+def _mad(x: np.ndarray) -> float:
+    x = x[np.isfinite(x)]
+    if len(x) == 0:
+        return float("nan")
+    med = np.median(x)
+    return np.median(np.abs(x - med))
+
+
+def _robust_z(x: np.ndarray) -> np.ndarray:
+    x = x.astype(float)
+    med = np.nanmedian(x)
+    mad = _mad(x)
+    if not np.isfinite(mad) or mad == 0:
+        return np.zeros_like(x)
+    return 0.6745 * (x - med) / mad
+
 
 def _confidence_label(n_used: int) -> str:
     if n_used >= 10:
@@ -140,155 +223,201 @@ def _confidence_label(n_used: int) -> str:
     return "LOW"
 
 
-def _to_numeric_lr(series: pd.Series) -> pd.Series:
-    """
-    Robust parse for GSPro fields that may include directions/units:
-      '11.4 R'     ->  11.4
-      '14.0 L'     -> -14.0
-      '2.6° R'     ->  2.6
-      '0.8° I-O'   ->  0.8
-      '4.1° U'     ->  4.1
-      '40.1°'      -> 40.1
-    Rule: extract first number; if contains standalone L token => negative.
-    """
-    s = series.astype(str).str.strip()
+# ============================================================
+# Column canonicalization (handles GSPro variations)
+# ============================================================
 
-    # Left indicator (token L anywhere)
-    is_left = s.str.contains(r"(^L\b|\bL\b|\bL$)", regex=True)
+def _canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
 
-    # Remove commas (just in case)
-    s = s.str.replace(",", "", regex=False)
+    # normalize headers aggressively
+    df.columns = (
+        pd.Index(df.columns)
+        .astype(str)
+        .str.strip()
+        .str.replace(" ", "_")
+        .str.replace("(", "", regex=False)
+        .str.replace(")", "", regex=False)
+        .str.replace("-", "_")
+        .str.lower()
+    )
 
-    # Extract first numeric token
-    num = s.str.extract(r"([-+]?\d*\.?\d+)", expand=False)
-    num = pd.to_numeric(num, errors="coerce")
+    # map common GSPro names -> internal names
+    rename_map = {
+        # club id
+        "club_name": "club",
+        "club": "club",
 
-    num = np.where(is_left, -num, num)
-    return pd.Series(num, index=series.index)
+        # speeds
+        "club_speed_mph": "club_speed",
+        "club_speed": "club_speed",
+        "ball_speed_mph": "ball_speed",
+        "ball_speed": "ball_speed",
+
+        # distances
+        "carry_dist_yd": "carry",
+        "carry": "carry",
+        "total_dist_yd": "total",
+        "total": "total",
+        "totaldistance": "total",
+        "total_dist": "total",
+
+        # dispersion
+        "offline_yd": "offline",
+        "offline": "offline",
+
+        # launch/angles
+        "hla": "hla",
+        "vla": "vla",
+        "desc_angle": "descent",
+        "descent_angle": "descent",
+        "descent": "descent",
+
+        # height
+        "peak_height_yd": "peak_height",
+        "peakheight": "peak_height",
+        "peak_height": "peak_height",
+
+        # spin
+        "back_spin": "spin",
+        "backspin": "spin",
+        "spin": "spin",
+        "spin_axis": "spin_axis",
+        "rawspinaxis": "spin_axis",
+        "side_spin": "side_spin",
+        "sidespin": "side_spin",
+
+        # swing delivery
+        "club_aoa": "aoa",
+        "aoa": "aoa",
+        "club_path": "path",
+        "path": "path",
+        "face_to_path": "face_to_path",
+        "facetopath": "face_to_path",
+        "face_to_target": "face_to_target",
+        "facetotarget": "face_to_target",
+
+        # optional
+        "distancetop in": "distance_to_pin",
+        "distance_to_pin": "distance_to_pin",
+    }
+
+    df = df.rename(columns={c: rename_map.get(c, c) for c in df.columns})
+
+    # ensure club column exists even if weird casing
+    if "club" not in df.columns:
+        # attempt: some exports keep "club_name" but got missed
+        for c in df.columns:
+            if c.replace("_", "") in ("clubname",):
+                df = df.rename(columns={c: "club"})
+                break
+
+    return df
 
 
-def _bucket_club(club_raw: Any) -> str:
+# ============================================================
+# Club bucket mapping
+# ============================================================
+
+def _club_bucket(club_raw: str) -> str:
     s = str(club_raw).upper().strip()
-    # common driver labels
-    if s in {"DR", "D", "DRIVER"}:
+
+    # GSPro often uses "DR", "H3", "HY", "3W" etc.
+    if s in {"DR", "DRIVER"}:
         return "DR"
-    # fairway wood common labels
-    if s in {"3W", "W3", "FW3", "3 WOOD", "3-WOOD"}:
+    if s in {"3W", "FW", "FAIRWAY", "W3"}:
         return "3W"
-    # hybrids: H3, HY, HB, etc.
-    if s.startswith("H") or s in {"HY", "HB", "HYBRID"}:
+    # hybrids
+    if s.startswith("H") and len(s) >= 2 and s[1].isdigit():
         return "HY"
-    return "OTHER"
+    if s in {"HY", "HYBRID"}:
+        return "HY"
+
+    return s
 
 
-def _robust_z(x: np.ndarray) -> np.ndarray:
-    x = x.astype(float)
-    med = np.nanmedian(x)
-    mad = np.nanmedian(np.abs(x - med))
-    if not np.isfinite(mad) or mad == 0:
-        return np.zeros_like(x)
-    return 0.6745 * (x - med) / mad
+# ============================================================
+# Outlier handling
+# ============================================================
 
-
-def _flag_outliers(df: pd.DataFrame, bucket: str) -> pd.Series:
+def flag_outliers_per_club(df_club: pd.DataFrame, bucket: str) -> pd.Series:
     """
-    Light outlier filter to stabilize averages.
-    Uses robust-z on carry and ball_speed if available.
+    Robust outlier detection using carry + ball_speed.
+    Returns boolean series True for outliers.
     """
-    if len(df) < 6:
-        return pd.Series(False, index=df.index)
+    n = len(df_club)
+    if n < 6:
+        return pd.Series([False] * n, index=df_club.index)
 
-    flags = pd.Series(False, index=df.index)
+    carry = df_club["carry"].to_numpy(dtype=float) if "carry" in df_club.columns else np.full(n, np.nan)
+    bs = df_club["ball_speed"].to_numpy(dtype=float) if "ball_speed" in df_club.columns else np.full(n, np.nan)
 
-    for col in ["carry", "ball_speed"]:
-        if col in df.columns:
-            z = _robust_z(pd.to_numeric(df[col], errors="coerce").to_numpy())
-            flags = flags | (np.abs(z) > 3.5)
+    z_c = _robust_z(np.nan_to_num(carry, nan=np.nanmedian(carry)))
+    z_b = _robust_z(np.nan_to_num(bs, nan=np.nanmedian(bs)))
 
-    # Extra: remove totally broken shots for driver
-    if bucket == "DR" and "carry" in df.columns:
-        carry = pd.to_numeric(df["carry"], errors="coerce")
-        flags = flags | (carry < 120)
+    # slightly looser threshold for small samples
+    thresh = 3.5
+    out = (np.abs(z_c) > thresh) | (np.abs(z_b) > thresh)
 
-    return flags.fillna(False)
+    return pd.Series(out, index=df_club.index)
 
 
-# =========================
-# Core analysis
-# =========================
+# ============================================================
+# Summaries + recommendations
+# ============================================================
+
+def _safe_smash(df_used: pd.DataFrame) -> float:
+    if "ball_speed" in df_used.columns and "club_speed" in df_used.columns:
+        bs = df_used["ball_speed"].mean(skipna=True)
+        cs = df_used["club_speed"].mean(skipna=True)
+        if pd.notna(bs) and pd.notna(cs) and cs != 0:
+            return float(bs / cs)
+    return float("nan")
+
 
 def summarize_club(df_used: pd.DataFrame, bucket: str, n_total: int) -> ClubSummary:
-    df_used = df_used.copy()
-
-    # Force numeric parsing for core fields (handles "11.4 R", "2.6° R", etc.)
-    for col in ["offline", "vla", "hla", "spin_axis", "face_to_target", "face_to_path", "descent", "peak_height"]:
-        if col in df_used.columns:
-            df_used[col] = _to_numeric_lr(df_used[col])
-
-    # Force numeric for standard numeric fields
-    for col in ["carry", "total", "ball_speed", "club_speed", "spin", "aoa", "path"]:
-        if col in df_used.columns:
-            df_used[col] = pd.to_numeric(df_used[col], errors="coerce")
-
-    # Smash if missing
-    if "smash" not in df_used.columns and "ball_speed" in df_used.columns and "club_speed" in df_used.columns:
-        with np.errstate(divide="ignore", invalid="ignore"):
-            df_used["smash"] = df_used["ball_speed"] / df_used["club_speed"]
-
     def mean(col: str) -> float:
-        if col not in df_used.columns:
-            return float("nan")
-        s = pd.to_numeric(df_used[col], errors="coerce")
-        return float(s.mean(skipna=True))
+        return float(df_used[col].mean(skipna=True)) if col in df_used.columns else float("nan")
 
     def std(col: str) -> float:
-        if col not in df_used.columns:
-            return float("nan")
-        s = pd.to_numeric(df_used[col], errors="coerce")
-        return float(s.std(skipna=True))
+        return float(df_used[col].std(skipna=True)) if col in df_used.columns else float("nan")
 
-    metrics = {
+    metrics: Dict[str, Any] = {
         "carry": mean("carry"),
         "total": mean("total"),
+        "offline_mean": mean("offline"),
+        "offline_abs_mean": float(df_used["offline"].abs().mean(skipna=True)) if "offline" in df_used.columns else float("nan"),
         "ball_speed": mean("ball_speed"),
         "club_speed": mean("club_speed"),
-        "smash": mean("smash"),
-
-        # launch (VLA)
+        "smash": mean("smash") if "smash" in df_used.columns else _safe_smash(df_used),
         "launch_vla": mean("vla"),
-        "launch": mean("vla"),  # alias for UI
-
+        # convenience alias (some code expects "launch")
+        "launch": mean("vla"),
         "spin": mean("spin"),
         "spin_axis": mean("spin_axis"),
         "aoa": mean("aoa"),
         "path": mean("path"),
         "face_to_path": mean("face_to_path"),
-
+        "face_to_target": mean("face_to_target"),
         "descent": mean("descent"),
         "peak_height": mean("peak_height"),
-
-        # offline
-        "offline_mean": mean("offline"),
-        "offline_abs_mean": float(pd.to_numeric(df_used["offline"], errors="coerce").abs().mean(skipna=True))
-        if "offline" in df_used.columns else float("nan"),
     }
 
-    variability = {
+    variability: Dict[str, Any] = {
         "offline_std": std("offline"),
         "launch_std": std("vla"),
         "spin_std": std("spin"),
         "face_to_path_std": std("face_to_path"),
+        "path_std": std("path"),
         "ball_speed_std": std("ball_speed"),
     }
 
-    n_used = int(df_used.shape[0])
-    confidence = _confidence_label(n_used)
-
+    n_used = int(len(df_used))
     return ClubSummary(
         club=bucket,
         n_total=int(n_total),
         n_used=n_used,
-        confidence=confidence,
+        confidence=_confidence_label(n_used),
         metrics=metrics,
         variability=variability,
     )
@@ -297,252 +426,227 @@ def summarize_club(df_used: pd.DataFrame, bucket: str, n_total: int) -> ClubSumm
 def limiting_factors(summary: ClubSummary) -> List[str]:
     m = summary.metrics
     v = summary.variability
-
     factors: List[str] = []
 
-    launch = m.get("launch", float("nan"))
-    spin = m.get("spin", float("nan"))
     offline_std = v.get("offline_std", float("nan"))
-    face_std = v.get("face_to_path_std", float("nan"))
     smash = m.get("smash", float("nan"))
+    launch = m.get("launch", m.get("launch_vla", float("nan")))
+    spin = m.get("spin", float("nan"))
 
-    if np.isfinite(offline_std) and offline_std > 20:
+    # dispersion
+    if np.isfinite(offline_std) and offline_std >= 20:
         factors.append("Dispersion is wide (offline variability high).")
 
-    if np.isfinite(face_std) and face_std > 3.5:
-        factors.append("Face-to-path is inconsistent (timing / face control).")
+    # smash
+    if np.isfinite(smash) and smash < 1.44:
+        factors.append("Smash factor is low (strike efficiency below potential).")
 
+    # launch/spin (driver emphasis)
     if summary.club == "DR":
-        if np.isfinite(launch) and launch < 10:
-            factors.append("Launch is low for this club.")
-        if np.isfinite(spin) and spin > 3100:
+        if np.isfinite(launch) and launch < 11:
+            factors.append("Launch is low for this swing speed.")
+        if np.isfinite(spin) and spin > 3000:
             factors.append("Spin is high (can reduce distance / add curvature).")
-        if np.isfinite(smash) and smash < 1.42:
-            factors.append("Strike efficiency is below potential (smash factor low).")
 
+    # hybrid spin can be higher naturally, but flag extreme
     if summary.club == "HY":
-        if np.isfinite(spin) and spin > 4500:
-            factors.append("Spin is high for a hybrid (possible added height/balloon).")
-
-    if not factors:
-        factors.append("No major red flags detected; focus on consistency and gapping.")
+        if np.isfinite(spin) and spin > 4800:
+            factors.append("Hybrid spin is very high (may cost distance / balloon).")
 
     return factors
 
 
-def recommend_for_club(summary: ClubSummary) -> List[Dict[str, Any]]:
-    m = summary.metrics
-    recs: List[Dict[str, Any]] = []
+def _driver_launch_window_by_speed(club_speed: float) -> Tuple[float, float]:
+    # Your spec ranges:
+    # Fast (>105): 10–14
+    # Average (90–105): 12–15
+    # Slow (<90): 14–19
+    if not np.isfinite(club_speed):
+        return 12.0, 15.0
+    if club_speed < 90:
+        return 14.0, 19.0
+    if 90 <= club_speed <= 105:
+        return 12.0, 15.0
+    return 10.0, 14.0
 
-    if summary.club == "DR":
-        launch = m.get("launch", float("nan"))
-        spin = m.get("spin", float("nan"))
-        offline_std = summary.variability.get("offline_std", float("nan"))
 
-        if np.isfinite(launch) and launch < 10:
-            recs.append({
-                "priority": 1,
-                "title": "Test a higher loft setting (+0.75° to +1.5°) first",
-                "rationale": "Launch is low; a small loft increase often raises launch without major swing changes.",
-                "confidence": summary.confidence,
-                "spec": {"adapter_loft_change_deg": "+0.75 to +1.5", "goal": {"launch_deg": "+1–2"}}
-            })
+def _fairway_launch_window_by_speed(club_speed: float) -> Tuple[float, float]:
+    # Simple MVP windows (tunable later)
+    if not np.isfinite(club_speed):
+        return 11.0, 15.0
+    if club_speed < 85:
+        return 13.0, 17.0
+    if 85 <= club_speed <= 100:
+        return 11.5, 15.5
+    return 10.5, 14.5
 
-        if np.isfinite(spin) and spin > 3000:
-            recs.append({
-                "priority": 2,
-                "title": "Bias toward a lower-spin build",
-                "rationale": "Spin is above a typical driver window; lowering spin can improve carry/roll and reduce curvature.",
-                "confidence": summary.confidence,
-                "spec": {
-                    "shaft_profile": "low–mid launch / low spin, tip-stiff, lower torque",
-                    "goal": {"spin_rpm": "-200 to -500"}
-                }
-            })
 
-        if np.isfinite(offline_std) and offline_std > 20:
-            recs.append({
-                "priority": 3,
-                "title": "Reduce dispersion (settings first)",
-                "rationale": "Wide dispersion suggests face/path variability. Start with sure-fit bias + strike location before buying parts.",
-                "confidence": summary.confidence,
-                "spec": {"goal": {"offline_std": "-10 yd"}}
-            })
+def _hybrid_launch_window_by_speed(club_speed: float) -> Tuple[float, float]:
+    # Simple MVP windows
+    if not np.isfinite(club_speed):
+        return 14.0, 18.0
+    if club_speed < 80:
+        return 16.0, 20.0
+    if 80 <= club_speed <= 95:
+        return 14.5, 18.5
+    return 13.5, 17.5
 
-        if not recs:
-            recs.append({
-                "priority": 1,
-                "title": "Stay in current window; test for consistency",
-                "rationale": "Numbers look generally playable. Focus on tightening strike and start line.",
-                "confidence": summary.confidence,
-                "spec": {}
-            })
 
-    if summary.club == "HY":
-        recs.append({
-            "priority": 1,
-            "title": "Hybrid spec check",
-            "rationale": "Confirm gapping and whether launch/spin fit your approach-shot needs.",
-            "confidence": summary.confidence,
-            "spec": {"goal": {"consistent_carry_window": "stable", "dispersion": "tighten"}}
-        })
-
-    if summary.club == "3W":
-        recs.append({
-            "priority": 1,
-            "title": "Fairway baseline",
-            "rationale": "Establish launch/spin/carry baseline and fit for tee + turf use.",
-            "confidence": summary.confidence,
-            "spec": {}
-        })
-
-    return recs
-
-def what_to_change_first(summary: ClubSummary) -> Dict[str, Any]:
-    """
-    Returns a single best next action (badge) based on the summary metrics.
-    """
+def recommend_for_club(summary: ClubSummary) -> List[Recommendation]:
     m = summary.metrics
     v = summary.variability
+    recs: List[Recommendation] = []
 
-    launch = m.get("launch", float("nan"))
+    club_speed = m.get("club_speed", float("nan"))
+    launch = m.get("launch", m.get("launch_vla", float("nan")))
     spin = m.get("spin", float("nan"))
     smash = m.get("smash", float("nan"))
     offline_std = v.get("offline_std", float("nan"))
 
-    # Driver logic
-    if summary.club == "DR":
-        if np.isfinite(launch) and launch < 10.0:
-            return {
-                "badge": "Raise launch",
-                "why": "Launch is low; test +0.75° to +1.5° loft (adapter) before buying shafts/heads.",
-                "priority": 1,
-            }
-        if np.isfinite(spin) and spin > 3000:
-            return {
-                "badge": "Lower spin",
-                "why": "Spin is high; test a lower-spin shaft profile (tip-stiff / lower torque) and avoid adding dynamic loft.",
-                "priority": 2,
-            }
-        if np.isfinite(offline_std) and offline_std > 20:
-            return {
-                "badge": "Tighten dispersion",
-                "why": "Dispersion is wide; settings/face control and strike location will help more than chasing distance.",
-                "priority": 3,
-            }
-        if np.isfinite(smash) and smash < 1.42:
-            return {
-                "badge": "Improve strike (smash)",
-                "why": "Strike efficiency is low; test strike-friendly tee height + ball position and verify centered contact.",
-                "priority": 4,
-            }
-        return {
-            "badge": "Keep testing",
-            "why": "No major red flags. Use a simple A/B test: loft change → shaft profile → head category.",
-            "priority": 5,
-        }
-
-    # Hybrid logic
-    if summary.club == "HY":
-        if np.isfinite(offline_std) and offline_std > 15:
-            return {
-                "badge": "Tighten dispersion",
-                "why": "Hybrid dispersion is the main limiter. Test lie/face angle settings and shaft weight/length consistency.",
-                "priority": 1,
-            }
-        if np.isfinite(spin) and spin > 4500:
-            return {
-                "badge": "Lower spin slightly",
-                "why": "Hybrid spin is high; test a slightly lower-spin shaft profile or a more neutral head setting.",
-                "priority": 2,
-            }
-        return {
-            "badge": "Confirm gapping",
-            "why": "Make sure carry gap to your next club is consistent (goal: predictable yardage window).",
-            "priority": 3,
-        }
-
-    # Fairway wood (if/when present)
-    if summary.club == "3W":
-        if np.isfinite(offline_std) and offline_std > 18:
-            return {"badge": "Tighten dispersion", "why": "Start with strike + face control; then tune loft/shaft.", "priority": 1}
-        return {"badge": "Confirm launch window", "why": "Tune launch/spin for turf + tee use.", "priority": 2}
-
-    return {"badge": "Next best test", "why": "Collect more shots to increase confidence.", "priority": 9}
-
-
-def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
-    df = _canonicalize_columns(df_raw)
-
-    if "club" not in df.columns:
-        raise ValueError("CSV missing club column. Expected GSPro 'Club Name' field.")
-
-    # Normalize club strings
-    df["club"] = df["club"].astype(str).str.strip()
-
-    club_results: Dict[str, ClubAnalysis] = {}
-
-    for club_raw, df_club in df.groupby("club", dropna=False):
-        bucket = _bucket_club(club_raw)
-        if bucket not in {"DR", "3W", "HY"}:
-            continue
-
-        n_total = len(df_club)
-
-        outliers = _flag_outliers(df_club, bucket)
-        df_used = df_club.loc[~outliers].copy()
-
-        summary = summarize_club(df_used, bucket, n_total=n_total)
-        factors = limiting_factors(summary)
-        recs = recommend_for_club(summary)
-
-        club_results[bucket] = ClubAnalysis(
-            summary=summary,
-            limiting_factors=factors,
-            recommendations=recs,
-            what_to_change_first=what_to_change_first(summary),
+    # Smash flag (you asked to flag smash)
+    if np.isfinite(smash) and smash < 1.44:
+        recs.append(
+            Recommendation(
+                priority=1,
+                title="Improve strike efficiency (Smash)",
+                rationale="Your smash factor is below typical potential for this speed. Before buying equipment, verify centered contact and consistent strike.",
+                confidence=summary.confidence,
+                spec={"target_smash": "≥1.46 (driver) if possible", "tip": "Check impact location; higher/center strikes often improve launch + reduce spin."},
+            )
         )
 
-    return SessionResult(club_results=club_results)
+    if summary.club == "DR":
+        low, high = _driver_launch_window_by_speed(club_speed)
+        if np.isfinite(launch) and launch < (low - 1.0):
+            recs.append(
+                Recommendation(
+                    priority=2,
+                    title="Test higher loft via hosel (+0.75° to +1.5°)",
+                    rationale=f"Your launch ({launch:.1f}°) is below your target window ({low:.0f}–{high:.0f}°) for ~{club_speed:.0f} mph club speed.",
+                    confidence=summary.confidence,
+                    spec={"adapter_loft_change_deg": "+0.75 to +1.5", "goal": {"launch_deg": f"{low:.0f}–{high:.0f}", "spin_rpm": "avoid ballooning"}},
+                )
+            )
+
+        if np.isfinite(spin) and spin > 3000:
+            recs.append(
+                Recommendation(
+                    priority=3,
+                    title="Bias toward a lower-spin build",
+                    rationale="Driver spin is above a typical window; lowering spin can improve carry/roll and reduce curvature.",
+                    confidence=summary.confidence,
+                    spec={"shaft_profile": "low–mid launch / low spin, tip-stiff, lower torque", "goal": {"spin_rpm": "-200 to -500"}},
+                )
+            )
+
+        if np.isfinite(offline_std) and offline_std >= 20:
+            recs.append(
+                Recommendation(
+                    priority=4,
+                    title="Tighten dispersion before chasing distance",
+                    rationale="Offline variability is high. Hosel/face-angle tweaks and strike/face control tend to deliver the biggest gains first.",
+                    confidence=summary.confidence,
+                    spec={"goal": {"offline_std_yd": "< 18"}, "notes": ["Try your recommended hosel move, then retest 10–15 shots."]},
+                )
+            )
+
+    if summary.club == "3W":
+        low, high = _fairway_launch_window_by_speed(club_speed)
+        if np.isfinite(launch) and launch < (low - 1.0):
+            recs.append(
+                Recommendation(
+                    priority=2,
+                    title="Test higher loft via hosel (+0.75°)",
+                    rationale=f"Fairway launch ({launch:.1f}°) is low vs window ({low:.1f}–{high:.1f}°).",
+                    confidence=summary.confidence,
+                    spec={"adapter_loft_change_deg": "+0.75", "goal": {"launch_deg": f"{low:.1f}–{high:.1f}"}},
+                )
+            )
+        if np.isfinite(spin) and spin < 2500:
+            recs.append(
+                Recommendation(
+                    priority=3,
+                    title="Increase spin/launch slightly (fairway hold)",
+                    rationale="Fairway spin looks quite low; you may struggle to hold greens.",
+                    confidence=summary.confidence,
+                    spec={"goal": {"spin_rpm": "+300 to +700"}, "notes": ["Try more loft or higher-launch shaft profile."]},
+                )
+            )
+
+    if summary.club == "HY":
+        low, high = _hybrid_launch_window_by_speed(club_speed)
+        if np.isfinite(launch) and launch < (low - 1.0):
+            recs.append(
+                Recommendation(
+                    priority=2,
+                    title="Test higher loft via hosel (+1°)",
+                    rationale=f"Hybrid launch ({launch:.1f}°) is low vs window ({low:.1f}–{high:.1f}°).",
+                    confidence=summary.confidence,
+                    spec={"adapter_loft_change_deg": "+1", "goal": {"launch_deg": f"{low:.1f}–{high:.1f}"}},
+                )
+            )
+        if np.isfinite(spin) and spin > 4800:
+            recs.append(
+                Recommendation(
+                    priority=3,
+                    title="Reduce hybrid spin slightly",
+                    rationale="Hybrid spin is very high; a slightly lower-spin shaft profile or more neutral setting can help.",
+                    confidence=summary.confidence,
+                    spec={"goal": {"spin_rpm": "-200 to -600"}},
+                )
+            )
+
+    # Keep list stable/sorted
+    recs = sorted(recs, key=lambda r: r.priority)
+    return recs
 
 
-# =========================
-# Titleist SureFit (Driver/FW) setting recommender
-# =========================
+# ============================================================
+# Hosel recommendation engine (Titleist SureFit)
+# Priority order you requested:
+# 1) Launch window (speed adjusted)
+# 2) Miss tendency (upright / flatter)  [user input required]
+# 3) Spin safety check
+# Then pick closest setting
+# ============================================================
 
-SUREFIT_RH = {
-    # loft_delta, lie_delta (upright positive)
-    "A3": (+1.5, +1.5), "B3": (+1.5, +0.75), "A4": (+1.5, 0.0),  "B4": (+1.5, -0.75),
-    "D3": (+0.75, +1.5), "C3": (+0.75, +0.75), "D4": (+0.75, 0.0), "C4": (+0.75, -0.75),
-    "A2": (0.0, +1.5),  "B2": (0.0, +0.75),  "A1": (0.0, 0.0),  "B1": (0.0, -0.75),
-    "D2": (-0.75, +1.5), "C2": (-0.75, +0.75), "D1": (-0.75, 0.0), "C1": (-0.75, -0.75),
-}
+def _get_surefit_table(club_type: str, handedness: str) -> Dict[str, Tuple[float, float]]:
+    club_type = (club_type or "").upper().strip()
+    handedness = (handedness or "RH").upper().strip()
 
-SUREFIT_LH = {
-    # loft_delta, lie_delta (upright positive)
-    "C1": (+1.5, -0.75), "D1": (+1.5, 0.0),  "C2": (+1.5, +0.75), "D2": (+1.5, +1.5),
-    "B1": (+0.75, -0.75), "A1": (+0.75, 0.0), "B2": (+0.75, +0.75), "A2": (+0.75, +1.5),
-    "C4": (0.0, -0.75),  "D4": (0.0, 0.0),  "C3": (0.0, +0.75),  "D3": (0.0, +1.5),
-    "B4": (-0.75, -0.75), "A4": (-0.75, 0.0), "B3": (-0.75, +0.75), "A3": (-0.75, +1.5),
-}
+    if club_type in {"DR", "3W"}:
+        return SUREFIT_DRIVER_FW_LH if handedness == "LH" else SUREFIT_DRIVER_FW_RH
 
-def recommend_titleist_surefit_driver(
-    summary: "ClubSummary",
+    if club_type == "HY":
+        return SUREFIT_HYBRID_LH if handedness == "LH" else SUREFIT_HYBRID_RH
+
+    # default fallback
+    return SUREFIT_DRIVER_FW_LH if handedness == "LH" else SUREFIT_DRIVER_FW_RH
+
+
+def _launch_window(club_type: str, club_speed: float) -> Tuple[float, float]:
+    if club_type == "DR":
+        return _driver_launch_window_by_speed(club_speed)
+    if club_type == "3W":
+        return _fairway_launch_window_by_speed(club_speed)
+    if club_type == "HY":
+        return _hybrid_launch_window_by_speed(club_speed)
+    return 12.0, 15.0
+
+
+def recommend_titleist_surefit(
+    summary: ClubSummary,
+    club_type: str,
     handedness: str,
     current_setting: str,
-    miss_tendency: str,
-) -> dict:
-    """
-    Strong, specific SureFit recommendation for Driver/FW:
-    - Uses user's miss tendency (B) as primary for direction.
-    - Uses launch/spin from summary to decide loft change.
-    Returns dict with from/to + expected effect.
-    """
+    miss_tendency: str,   # "RIGHT" / "LEFT" / "BOTH" / "NOT SURE"
+) -> Dict[str, Any]:
+    club_type = (club_type or summary.club or "").upper().strip()
     handedness = (handedness or "RH").upper().strip()
     current_setting = (current_setting or "").upper().strip()
     miss_tendency = (miss_tendency or "NOT SURE").upper().strip()
 
-    table = SUREFIT_LH if handedness == "LH" else SUREFIT_RH
+    table = _get_surefit_table(club_type, handedness)
 
     if current_setting not in table:
         return {
@@ -553,76 +657,59 @@ def recommend_titleist_surefit_driver(
             "expected": {},
         }
 
-    launch = summary.metrics.get("launch", summary.metrics.get("launch_vla", float("nan")))
-    spin = summary.metrics.get("spin", float("nan"))
+    # --- read metrics robustly ---
+    club_speed = float(summary.metrics.get("club_speed", np.nan))
+    launch = summary.metrics.get("launch", summary.metrics.get("launch_vla", np.nan))
+    launch = float(launch) if launch is not None else np.nan
+    spin = float(summary.metrics.get("spin", np.nan))
 
-    # ---- Decide loft target using swing-speed launch windows ----
-    
-    club_speed = summary.metrics.get("club_speed", float("nan"))
-    launch = summary.metrics.get("launch", float("nan"))
-    
-    # Default launch window
-    target_low = 12.0
-    target_high = 15.0
-    
-    # Adjust window based on swing speed
-    if np.isfinite(club_speed):
-    
-        if club_speed < 90:
-            target_low = 14.0
-            target_high = 19.0
-    
-        elif 90 <= club_speed <= 105:
-            target_low = 12.0
-            target_high = 15.0
-    
-        else:  # faster swing speeds
-            target_low = 10.0
-            target_high = 14.0
-    
-    
+    # --- 1) Launch window (speed adjusted) ---
+    target_low, target_high = _launch_window(club_type, club_speed)
+
     loft_need = 0.0
-    
     if np.isfinite(launch):
+        if launch < (target_low - 1.0):
+            loft_need = +0.75 if club_type in {"DR", "3W"} else +1.0
+            if launch < (target_low - 2.0):
+                loft_need = +1.5 if club_type in {"DR", "3W"} else +2.0
+        elif launch > (target_high + 1.0):
+            loft_need = -0.75 if club_type in {"DR", "3W"} else -1.0
 
-    if launch < (target_low - 1.0):
-        loft_need = +0.75
-
-        if launch < (target_low - 2.0):
-            loft_need = +1.5
-
-    elif launch > (target_high + 1.0):
-        loft_need = -0.75
-
-    # ---- Decide direction target from user miss tendency ----
-    # We interpret:
-    # - miss RIGHT => add draw bias => more upright
-    # - miss LEFT  => add fade bias => flatter
+    # --- 2) Miss tendency (upright / flatter) ---
+    # Use the player's words as primary (your choice B).
+    # RIGHT miss -> more upright (draw bias)
+    # LEFT miss  -> flatter (fade bias)
     lie_need = 0.0
     if miss_tendency == "RIGHT":
-        lie_need = +0.75
-        # if also high dispersion, nudge stronger
-        if summary.variability.get("offline_std", 0) and summary.variability["offline_std"] > 20:
-            lie_need = +1.5
+        lie_need = +1.5 if club_type in {"DR", "3W"} else +2.0
     elif miss_tendency == "LEFT":
-        lie_need = -0.75
-    else:
-        lie_need = 0.0  # BOTH / NOT SURE
+        lie_need = -0.75 if club_type in {"DR", "3W"} else -1.0
 
-    # ---- Build target deltas relative to current ----
+    # --- 3) Spin safety check (soft guardrails) ---
+    # If spin is already high, don't pile on too much loft.
+    if np.isfinite(spin) and loft_need > 0:
+        if club_type == "DR" and spin > 3100:
+            loft_need = +0.75 if loft_need > +0.75 else loft_need
+        if club_type == "3W" and spin > 4800:
+            loft_need = +0.75 if loft_need > +0.75 else loft_need
+        if club_type == "HY" and spin > 5200:
+            loft_need = +1.0 if loft_need > +1.0 else loft_need
+
+    # --- Build target deltas relative to current ---
     curr_loft, curr_lie = table[current_setting]
     target_loft = curr_loft + loft_need
     target_lie = curr_lie + lie_need
 
-    # clamp to available
-    def _clamp(x, lo, hi):
-        return max(lo, min(hi, x))
+    # clamp to available ranges for each table type
+    if club_type in {"DR", "3W"}:
+        target_loft = float(np.clip(target_loft, -0.75, +1.5))
+        target_lie = float(np.clip(target_lie, -0.75, +1.5))
+    else:
+        target_loft = float(np.clip(target_loft, -1.0, +2.0))
+        target_lie = float(np.clip(target_lie, -1.0, +2.0))
 
-    target_loft = _clamp(target_loft, -0.75, +1.5)
-    target_lie = _clamp(target_lie, -0.75, +1.5)
-
-    # ---- Choose closest setting in this handedness table ----
-    best = None
+    # --- Choose closest setting (least squares distance) ---
+    best = current_setting
     best_dist = 1e9
     for setting, (ld, lied) in table.items():
         dist = (ld - target_loft) ** 2 + (lied - target_lie) ** 2
@@ -630,46 +717,47 @@ def recommend_titleist_surefit_driver(
             best_dist = dist
             best = setting
 
+    # if no change
     if best == current_setting:
         return {
             "action": "no_change",
             "from": current_setting,
             "to": best,
-            "why": "Your current setting is already close to the best match for your miss tendency and launch window.",
-            "expected": {"launch_deg": "≈0", "start_line": "≈0"},
+            "why": "Your current setting is already the closest match to your launch window + miss tendency.",
+            "expected": {"launch_window": f"{target_low:.1f}–{target_high:.1f}°"},
         }
 
-    # ---- Build explanation ----
+    # explanation
     best_loft, best_lie = table[best]
     d_loft = best_loft - curr_loft
     d_lie = best_lie - curr_lie
 
-    expected = {}
-    if d_loft > 0:
-        expected["launch_deg"] = f"+{d_loft:.2f} (square-face effective)"
-        expected["note"] = "Higher loft can add launch and may add spin—confirm spin doesn’t balloon."
-    elif d_loft < 0:
-        expected["launch_deg"] = f"{d_loft:.2f} (square-face effective)"
-        expected["note"] = "Lower loft can reduce launch/spin—confirm you don’t lose carry."
-
-    if d_lie > 0:
-        expected["direction_bias"] = "More draw bias (more upright)"
-    elif d_lie < 0:
-        expected["direction_bias"] = "More fade bias (flatter)"
-
-    # extra spin caution
-    if np.isfinite(spin) and spin > 3200 and d_loft > 0:
-        expected["spin_watchout"] = "Spin already high—if spin rises further, switch to lower-spin shaft profile instead of more loft."
-
-    why_parts = []
+    why_parts: List[str] = []
+    if np.isfinite(launch):
+        why_parts.append(f"Launch {launch:.1f}° vs target {target_low:.1f}–{target_high:.1f}°")
     if loft_need > 0:
-        why_parts.append("Launch is low → add loft")
+        why_parts.append("Add loft to raise launch")
     if loft_need < 0:
-        why_parts.append("Launch is high → reduce loft")
+        why_parts.append("Reduce loft to lower launch")
     if miss_tendency == "RIGHT":
-        why_parts.append("Miss is right → add draw bias (upright lie)")
+        why_parts.append("Miss right → more upright (draw bias)")
     if miss_tendency == "LEFT":
-        why_parts.append("Miss is left → add fade bias (flatter lie)")
+        why_parts.append("Miss left → flatter (fade bias)")
+
+    expected: Dict[str, Any] = {}
+    if d_loft != 0:
+        expected["loft_change_deg"] = f"{d_loft:+.2f}"
+        expected["launch_expectation"] = "+1–2°" if d_loft > 0 else "-1–2°"
+    if d_lie != 0:
+        expected["lie_change_deg"] = f"{d_lie:+.2f}"
+        expected["direction_bias"] = "More draw bias" if d_lie > 0 else "More fade bias"
+    if np.isfinite(spin) and d_loft > 0:
+        if club_type == "DR" and spin > 3100:
+            expected["spin_watchout"] = "Spin already high—if spin climbs, keep loft and move to a lower-spin shaft profile instead."
+        if club_type == "3W" and spin > 4800:
+            expected["spin_watchout"] = "Spin already high—if spin climbs, keep loft and test a lower-spin shaft profile."
+        if club_type == "HY" and spin > 5200:
+            expected["spin_watchout"] = "Spin already high—if spin climbs, avoid more loft and test a lower-spin shaft profile."
 
     return {
         "action": "change_setting",
@@ -680,9 +768,99 @@ def recommend_titleist_surefit_driver(
     }
 
 
-def session_to_dict(result: SessionResult) -> Dict[str, object]:
-    out: Dict[str, object] = {"clubs": {}}
+# ============================================================
+# Main analyzer
+# ============================================================
 
+def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
+    df = _canonicalize_columns(df_raw.copy())
+
+    # required
+    if "club" not in df.columns:
+        raise ValueError("CSV missing club column (could not find Club/Club Name).")
+
+    # normalize club strings
+    df["club"] = df["club"].astype(str).str.upper().str.strip()
+
+    # Clean DistanceToPin like "181.28 yds" -> 181.28 (optional)
+    if "distance_to_pin" in df.columns:
+        df["distance_to_pin"] = (
+            df["distance_to_pin"].astype(str)
+            .str.replace("yds", "", regex=False)
+            .str.replace("yd", "", regex=False)
+            .str.replace(",", "", regex=False)
+            .str.strip()
+        )
+        df["distance_to_pin"] = pd.to_numeric(df["distance_to_pin"], errors="coerce")
+
+    # convert numeric columns (strings->numbers)
+    numeric_cols = [
+        "carry", "total", "offline",
+        "ball_speed", "club_speed", "smash",
+        "vla", "hla", "peak_height", "descent",
+        "spin", "spin_axis", "side_spin",
+        "aoa", "path", "face_to_path", "face_to_target",
+    ]
+
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = (
+                df[col].astype(str)
+                .str.replace("yds", "", regex=False)
+                .str.replace("yd", "", regex=False)
+                .str.replace(",", "", regex=False)
+                .str.strip()
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # fields that often have L/R markers
+    for col in ["offline", "hla", "spin_axis", "face_to_target", "vla", "aoa", "path", "face_to_path"]:
+        if col in df.columns:
+            df[col] = _to_numeric_lr(df[col])
+
+    club_results: Dict[str, ClubAnalysis] = {}
+
+    for club_raw, df_club in df.groupby("club", dropna=False):
+        bucket = _club_bucket(club_raw)
+        if bucket not in {"DR", "3W", "HY"}:
+            continue
+
+        n_total = len(df_club)
+        outliers = flag_outliers_per_club(df_club, bucket)
+        df_used = df_club.loc[~outliers].copy()
+
+        # ensure smash exists
+        if "smash" not in df_used.columns and "ball_speed" in df_used.columns and "club_speed" in df_used.columns:
+            df_used["smash"] = df_used["ball_speed"] / df_used["club_speed"]
+
+        # repeat numeric conversion at club level (robust against dtype changes)
+        for col in numeric_cols:
+            if col in df_used.columns:
+                df_used[col] = pd.to_numeric(df_used[col], errors="coerce")
+
+        for col in ["offline", "hla", "spin_axis", "face_to_target", "vla", "aoa", "path", "face_to_path"]:
+            if col in df_used.columns:
+                df_used[col] = _to_numeric_lr(df_used[col])
+
+        summary = summarize_club(df_used, bucket, n_total=n_total)
+        factors = limiting_factors(summary)
+        recs = recommend_for_club(summary)
+
+        club_results[bucket] = ClubAnalysis(
+            summary=summary,
+            limiting_factors=factors,
+            recommendations=recs,
+        )
+
+    return SessionResult(club_results=club_results)
+
+
+# ============================================================
+# Streamlit-friendly export
+# ============================================================
+
+def session_to_dict(result: SessionResult) -> Dict[str, Any]:
+    out: Dict[str, Any] = {"clubs": {}}
     for club, analysis in result.club_results.items():
         out["clubs"][club] = {
             "summary": {
@@ -693,9 +871,17 @@ def session_to_dict(result: SessionResult) -> Dict[str, object]:
                 "metrics": analysis.summary.metrics,
                 "variability": analysis.summary.variability,
             },
-            "what_to_change_first": analysis.what_to_change_first,
             "limiting_factors": analysis.limiting_factors,
-            "recommendations": analysis.recommendations,
+            "recommendations": [
+                {
+                    "priority": r.priority,
+                    "title": r.title,
+                    "rationale": r.rationale,
+                    "confidence": r.confidence,
+                    "spec": r.spec,
+                }
+                for r in analysis.recommendations
+            ],
+            "titleist_compatibility": TITLEIST_COMPATIBILITY,
         }
-
     return out

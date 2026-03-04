@@ -23,7 +23,6 @@ if uploaded is None:
 df = pd.read_csv(uploaded)
 
 st.write("Columns after canonicalization:")
-st.write(list(df_test.columns))
 st.write("Detected Columns:")
 if show_raw:
     st.subheader("Raw Data (first 200 rows)")

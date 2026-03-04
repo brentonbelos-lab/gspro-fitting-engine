@@ -95,12 +95,12 @@ _CLUB_PATTERNS = [
     ("5W", [r"\b5W\b", r"\b5\s*WOOD\b"]),
     ("7W", [r"\b7W\b", r"\b7\s*WOOD\b"]),
     ("9W", [r"\b9W\b", r"\b9\s*WOOD\b"]),
-    ("2H", [r"\b2H\b", r"\b2\s*HY\b", r"\b2\s*HYBRID\b"]),
-    ("3H", [r"\b3H\b", r"\b3\s*HY\b", r"\b3\s*HYBRID\b"]),
-    ("4H", [r"\b4H\b", r"\b4\s*HY\b", r"\b4\s*HYBRID\b"]),
-    ("5H", [r"\b5H\b", r"\b5\s*HY\b", r"\b5\s*HYBRID\b"]),
-    ("6H", [r"\b6H\b", r"\b6\s*HY\b", r"\b6\s*HYBRID\b"]),
-    ("7H", [r"\b7H\b", r"\b7\s*HY\b", r"\b7\s*HYBRID\b"]),
+    ("2H", [r"\b2H\b", r"\bH2\b", r"\b2\s*HY\b", r"\b2\s*HYBRID\b"]),
+    ("3H", [r"\b3H\b", r"\bH3\b", r"\b3\s*HY\b", r"\b3\s*HYBRID\b"]),
+    ("4H", [r"\b4H\b", r"\bH4\b", r"\b4\s*HY\b", r"\b4\s*HYBRID\b"]),
+    ("5H", [r"\b5H\b", r"\bH5\b", r"\b5\s*HY\b", r"\b5\s*HYBRID\b"]),
+    ("6H", [r"\b6H\b", r"\bH6\b", r"\b6\s*HY\b", r"\b6\s*HYBRID\b"]),
+    ("7H", [r"\b7H\b", r"\bH7\b", r"\b7\s*HY\b", r"\b7\s*HYBRID\b"]),
 ]
 
 def normalize_club_label(raw: object) -> str:
@@ -124,6 +124,11 @@ def normalize_club_label(raw: object) -> str:
     if m:
         return f"{m.group(1)}W"
     m = re.search(r"\b([2-9])\s*H\b", s_clean)
+    if m:
+        return f"{m.group(1)}H"
+
+    # fallback: recognize "H3" / "H 3" / "H-3"
+    m = re.search(r"\bH\s*([2-9])\b", s_clean)
     if m:
         return f"{m.group(1)}H"
 
@@ -361,14 +366,31 @@ def pick_one_hosel_setting(
     needed_loft_delta: float,
     needed_lie_delta: float,
 ) -> Dict[str, object]:
+    """
+    Returns ONE recommended hosel setting if exact deltas exist.
+    Adds a strong penalty if the setting moves loft in the opposite direction
+    of the required loft change (prevents 'lower loft' recommendations when
+    launch is too low, and vice-versa).
+    """
     scored = []
+
     for s in settings:
         d = translate_fn(brand, system_name, s, handedness)
         loft = getattr(d, "loft_deg", None)
         lie = getattr(d, "lie_deg", None)
         if loft is None or lie is None:
             continue
+
+        # Base distance-to-goal score
         score = abs(loft - needed_loft_delta) * 1.5 + abs(lie - needed_lie_delta) * 1.0
+
+        # Directional guardrail for loft
+        # If we need more loft, strongly avoid negative loft settings (and vice versa)
+        if needed_loft_delta > 0.25 and loft < -0.01:
+            score += 100.0
+        if needed_loft_delta < -0.25 and loft > 0.01:
+            score += 100.0
+
         scored.append((score, s, loft, lie))
 
     if not scored:

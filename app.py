@@ -21,9 +21,7 @@ if uploaded is None:
 
 # Read CSV
 df = pd.read_csv(uploaded)
-from fit_engine import _canonicalize_columns
 
-df_test = _canonicalize_columns(df.copy())
 st.write("Columns after canonicalization:")
 st.write(list(df_test.columns))
 st.write("Detected Columns:")

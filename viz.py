@@ -113,31 +113,47 @@ def render_dispersion(
         return
 
     fig = go.Figure()
-    # --- Fairway band shading ---
+    fig.add_hline(
+        y=0,
+        line_width=2,
+        line_dash="solid",
+        opacity=0.5
+    )
+    # --- Fairway band shading (stronger + visible) ---
     half_fw = fairway_width / 2
     
+    # Fairway (green)
     fig.add_hrect(
         y0=-half_fw,
         y1=half_fw,
-        fillcolor="rgba(80,200,120,0.18)",  # fairway green
+        fillcolor="rgba(0,180,90,0.22)",
         line_width=0,
-        layer="below"
+        layer="below",
     )
     
+    # Target corridor (lighter stripe inside fairway) ±10 yd
+    fig.add_hrect(
+        y0=-10,
+        y1=10,
+        fillcolor="rgba(0,180,90,0.32)",
+        line_width=0,
+        layer="below",
+    )
+    
+    # Rough (top and bottom bands)
     fig.add_hrect(
         y0=half_fw,
-        y1=200,
-        fillcolor="rgba(200,200,200,0.08)",  # light rough
+        y1=half_fw + 120,
+        fillcolor="rgba(160,160,160,0.14)",
         line_width=0,
-        layer="below"
+        layer="below",
     )
-    
     fig.add_hrect(
-        y0=-200,
+        y0=-half_fw - 120,
         y1=-half_fw,
-        fillcolor="rgba(200,200,200,0.08)",  # light rough
+        fillcolor="rgba(160,160,160,0.14)",
         line_width=0,
-        layer="below"
+        layer="below",
     )
     clubs = sorted(plot_df["club_id"].unique().tolist())
 
@@ -210,12 +226,13 @@ def render_dispersion(
         height=520,
         margin=dict(l=40, r=20, t=60, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        plot_bgcolor="rgba(245,245,245,1)",
+        paper_bgcolor="white",
     )
     fig.update_xaxes(showgrid=True, zeroline=False)
     fig.update_yaxes(
         showgrid=True,
-        zeroline=True,
-        zerolinewidth=1,
+        zeroline=False,
         autorange="reversed"
     )
 

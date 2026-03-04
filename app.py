@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -22,12 +22,15 @@ from fit_engine import (
     pick_one_hosel_setting,
 )
 
+# -----------------------------
+# Streamlit config
+# -----------------------------
 st.set_page_config(page_title="FitCaddie — Spec-Range MVP", layout="wide")
 st.title("FitCaddie — Spec-Range MVP")
 st.caption("Upload a GSPro CSV export to get club-by-club insights and spec-range fitting recommendations.")
 
 # -----------------------------
-# Helpers: robust numeric parsing
+# Parsing helpers
 # -----------------------------
 def _extract_float(s: str) -> Optional[float]:
     if s is None or (isinstance(s, float) and np.isnan(s)):
@@ -40,20 +43,18 @@ def _extract_float(s: str) -> Optional[float]:
     m = re.search(r"-?\d+(\.\d+)?", txt)
     return float(m.group(0)) if m else None
 
+
 def parse_dir_value(value) -> Optional[float]:
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return None
     if isinstance(value, (int, float, np.integer, np.floating)):
         return float(value)
-
     s = str(value).strip()
     if not s:
         return None
-
     num = _extract_float(s)
     if num is None:
         return None
-
     s_upper = s.upper()
     if re.search(r"\bL\b", s_upper): return -abs(num)
     if re.search(r"\bR\b", s_upper): return abs(num)
@@ -65,23 +66,28 @@ def parse_dir_value(value) -> Optional[float]:
     if re.search(r"\bO\b", s_upper): return abs(num)
     return num
 
+
 def safe_mean(x: pd.Series) -> float:
     x = pd.to_numeric(x, errors="coerce")
     return float(x.dropna().mean()) if x.notna().any() else float("nan")
 
+
 def safe_std(x: pd.Series) -> float:
     x = pd.to_numeric(x, errors="coerce")
     return float(x.dropna().std(ddof=1)) if x.dropna().shape[0] >= 2 else float("nan")
+
 
 # -----------------------------
 # Canonicalize GSPro exports
 # -----------------------------
 CANON = [
     "club","club_speed_mph","ball_speed_mph","smash",
-    "carry_yd","total_yd","offline_yd","peak_height_yd",
-    "descent_deg","hla_deg","vla_deg","backspin_rpm","spin_axis_deg",
+    "carry_yd","total_yd","offline_yd",
+    "peak_height_yd","descent_deg","hla_deg","vla_deg",
+    "backspin_rpm","spin_axis_deg",
     "aoa_deg","club_path_deg","face_to_path_deg","face_to_target_deg",
 ]
+
 
 def detect_format(columns: List[str]) -> str:
     cols = set(columns)
@@ -90,6 +96,7 @@ def detect_format(columns: List[str]) -> str:
     if "Club" in cols and "ClubSpeed" in cols and "BallSpeed" in cols:
         return "software"
     return "unknown"
+
 
 def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
     fmt = detect_format(df.columns.tolist())
@@ -133,8 +140,10 @@ def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
         out["club_path_deg"] = pd.to_numeric(df.get("Path"), errors="coerce")
         out["face_to_path_deg"] = pd.to_numeric(df.get("FaceToPath"), errors="coerce")
         out["face_to_target_deg"] = pd.to_numeric(df.get("FaceToTarget"), errors="coerce")
-        out["smash"] = pd.to_numeric(df.get("SmashFactor"), errors="coerce")
-        if out["smash"].isna().all():
+
+        if "SmashFactor" in df.columns:
+            out["smash"] = pd.to_numeric(df.get("SmashFactor"), errors="coerce")
+        else:
             out["smash"] = (out["ball_speed_mph"] / out["club_speed_mph"]).replace([np.inf, -np.inf], np.nan)
 
     else:
@@ -149,17 +158,19 @@ def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
     out["club"] = out["club"].astype(str).str.strip().replace({"nan": np.nan})
     return out, fmt
 
+
 def bucket_club(club: str) -> str:
     if club is None or (isinstance(club, float) and np.isnan(club)):
         return "OTHER"
     c = str(club).upper().strip()
     if c in {"DR", "D", "DRIVER"} or c.startswith("DR"):
         return "DR"
-    if "W" in c and any(n in c for n in ["2", "3", "4", "5", "7", "9"]):
+    if "W" in c and any(n in c for n in ["2","3","4","5","7","9"]):
         return "FW"
     if c.startswith("H") or "HY" in c:
         return "HY"
     return "OTHER"
+
 
 def miss_tendency(offline_avg: float) -> str:
     if np.isnan(offline_avg): return "Unknown"
@@ -167,11 +178,13 @@ def miss_tendency(offline_avg: float) -> str:
     if offline_avg < -5: return "Left miss tendency"
     return "Centered"
 
+
 def spin_safety(backspin_avg: float) -> str:
     if np.isnan(backspin_avg): return "Unknown"
     if backspin_avg < 1800: return "Low spin risk"
     if backspin_avg > 3300: return "High spin risk"
     return "Spin in a safe range"
+
 
 def smash_flag_driver(smash_avg: float) -> Optional[str]:
     if np.isnan(smash_avg): return None
@@ -180,6 +193,7 @@ def smash_flag_driver(smash_avg: float) -> Optional[str]:
     if smash_avg < 1.45:
         return f"Smash factor is slightly low ({smash_avg:.2f}). There’s still efficiency left."
     return None
+
 
 # -----------------------------
 # Sidebar
@@ -196,7 +210,7 @@ with st.sidebar:
         max_value=1.6,
         value=1.0,
         step=0.05,
-        help="How much a sleeve loft change alters delivered dynamic loft. 1.0 assumes delivery unchanged."
+        help="Higher = your delivery/strike tends to increase launch more when you add loft."
     )
 
     st.divider()
@@ -241,23 +255,25 @@ if not selected_buckets:
 df = canon_df[canon_df["bucket"].isin(selected_buckets)].copy()
 
 # -----------------------------
-# Hosel Setup UI (DR + multiple FW/HY)
+# Hosel Setup UI (Driver + multiple FW/HY)
 # -----------------------------
 st.divider()
 st.header("Hosel & Club Setup")
+st.caption("Pick your current setting and (optionally) a proposed setting. FitCaddie will estimate launch/spin change when it can.")
 
 def club_setup_ui(section_title: str, club_type: str, n: int, default_labels: List[str]):
     st.subheader(section_title)
     setups = []
 
     for i in range(n):
-        st.markdown(f"**{default_labels[i] if i < len(default_labels) else f'{club_type}-{i+1}'}**")
+        label_default = default_labels[i] if i < len(default_labels) else f"{club_type}-{i+1}"
+        st.markdown(f"### {label_default}")
 
-        cc1, cc2, cc3, cc4, cc5 = st.columns([1.0, 1.2, 0.9, 1.3, 1.3])
+        cc1, cc2, cc3, cc4, cc5 = st.columns([1.0, 1.0, 0.9, 1.2, 1.5])
         with cc1:
-            label = st.text_input("Label", value=(default_labels[i] if i < len(default_labels) else f"{club_type}-{i+1}"), key=f"{club_type}_label_{i}")
+            label = st.text_input("Label", value=label_default, key=f"{club_type}_label_{i}")
         with cc2:
-            stated_loft = st.number_input("Stated Loft (°)", min_value=0.0, max_value=30.0, value=(0.0), step=0.5, key=f"{club_type}_loft_{i}")
+            stated_loft = st.number_input("Stated Loft (°)", min_value=0.0, max_value=30.0, value=0.0, step=0.5, key=f"{club_type}_loft_{i}")
         with cc3:
             handedness = st.selectbox("Hand", ["RH", "LH"], index=0, key=f"{club_type}_hand_{i}")
         with cc4:
@@ -281,9 +297,8 @@ def club_setup_ui(section_title: str, club_type: str, n: int, default_labels: Li
         cur_loft = getattr(cur_delta, "loft_deg", None)
         new_loft = getattr(new_delta, "loft_deg", None)
 
-        # Compute delta between settings when possible
-        if cur_loft is not None and new_loft is not None:
-            delta_static_loft = (new_loft - cur_loft)
+        if (cur_loft is not None) and (new_loft is not None) and (proposed_setting != current_setting):
+            delta_static_loft = new_loft - cur_loft
             est = estimate_launch_spin_change(delta_static_loft, k_loft_to_dynamic, club_type)
             st.info(
                 f"Estimated launch change: **{est.launch_change_deg:+.1f}°** "
@@ -291,10 +306,11 @@ def club_setup_ui(section_title: str, club_type: str, n: int, default_labels: Li
                 f"Estimated spin change: **{est.spin_change_rpm:+d} rpm** "
                 f"(range {est.spin_range_rpm[0]:+d} to {est.spin_range_rpm[1]:+d})"
             )
-        else:
+            st.caption(est.notes)
+        elif proposed_setting != current_setting:
             ranges = system_ranges(brand, system_name)
             st.warning(
-                "Exact loft deltas for these settings aren’t encoded yet, so FitCaddie can’t compute a numeric change.\n\n"
+                "FitCaddie can’t compute exact launch/spin deltas for this hosel chart yet (range-only).\n\n"
                 f"System ranges: loft={ranges.get('loft_range_deg')}, lie={ranges.get('lie_range_deg')}."
             )
 
@@ -321,11 +337,11 @@ if "DR" in selected_buckets:
     hosel_setups["DR"] = club_setup_ui("Driver", "DR", 1, ["Driver"])
 
 if "FW" in selected_buckets:
-    n_fw = st.slider("How many fairway woods do you want to configure?", 1, 4, 1, 1)
-    hosel_setups["FW"] = club_setup_ui("Fairway Woods", "FW", n_fw, ["3W", "5W", "7W", "9W"])
+    n_fw = st.slider("How many fairway woods to configure?", 1, 4, 1, 1)
+    hosel_setups["FW"] = club_setup_ui("Fairway Woods", "FW", n_fw, ["3W", "4W", "5W", "7W"])
 
 if "HY" in selected_buckets:
-    n_hy = st.slider("How many hybrids do you want to configure?", 1, 4, 1, 1)
+    n_hy = st.slider("How many hybrids to configure?", 1, 4, 1, 1)
     hosel_setups["HY"] = club_setup_ui("Hybrids", "HY", n_hy, ["3H", "4H", "5H", "6H"])
 
 # -----------------------------
@@ -354,9 +370,7 @@ for bucket in selected_buckets:
     }
 
     mcols = st.columns(4)
-    keys = list(agg.keys())
-    for i, k in enumerate(keys):
-        mean_v, std_v = agg[k]
+    for i, (k, (mean_v, std_v)) in enumerate(agg.items()):
         value = "—" if np.isnan(mean_v) else f"{mean_v:.2f}"
         delta_txt = None if np.isnan(std_v) else f"±{std_v:.2f}"
         mcols[i % 4].metric(k, value, delta_txt)
@@ -382,9 +396,9 @@ for bucket in selected_buckets:
     st.markdown("### Recommendations")
     recos: List[str] = []
 
-    # Driver hosel recommendation (ONE setting)
+    # Driver: ONE hosel recommendation (if DR setup exists)
     if bucket == "DR" and hosel_setups["DR"]:
-        h = hosel_setups["DR"][0]  # driver config
+        h = hosel_setups["DR"][0]
         brand, system_name, handedness = h["brand"], h["system_name"], h["handedness"]
         current_setting = h["current_setting"]
 
@@ -394,25 +408,24 @@ for bucket in selected_buckets:
         needed_loft = 0.0
         needed_lie = 0.0
 
-        # 1) Launch window (speed adjusted)
+        # Priority 1: Launch window
         if not np.isnan(cs_avg) and not np.isnan(vla_avg):
             t = driver_targets(cs_avg)
             launch_lo, launch_hi = t["launch"]
-
-            launch_per_static_loft = 0.85 * k_loft_to_dynamic  # based on 85% dynamic loft relationship
+            launch_per_static_loft = 0.85 * k_loft_to_dynamic
             if vla_avg < launch_lo:
                 needed_loft = min(2.0, (launch_lo - vla_avg) / max(0.05, launch_per_static_loft))
             elif vla_avg > launch_hi:
                 needed_loft = max(-2.0, -(vla_avg - launch_hi) / max(0.05, launch_per_static_loft))
 
-        # 2) Miss tendency (upright/flatter)
+        # Priority 2: Miss tendency (lie)
         if not np.isnan(off_avg):
             if off_avg > 5:
                 needed_lie = +0.75
             elif off_avg < -5:
                 needed_lie = -0.75
 
-        # 3) Spin safety check
+        # Priority 3: Spin safety check
         if not np.isnan(spin_avg):
             if spin_avg < 1800:
                 needed_loft = max(needed_loft, +0.75)
@@ -420,7 +433,6 @@ for bucket in selected_buckets:
                 needed_loft = min(needed_loft, -0.75)
 
         settings = list_settings(brand, system_name, handedness)
-
         reco = pick_one_hosel_setting(
             settings=settings,
             translate_fn=translate_setting,
@@ -433,12 +445,9 @@ for bucket in selected_buckets:
         )
 
         if abs(needed_loft) < 0.25 and abs(needed_lie) < 0.25:
-            recos.append("Hosel: your current setting looks fine relative to launch/miss/spin (no change suggested).")
+            recos.append("Hosel: your current driver setting looks fine (no change suggested).")
         else:
-            recos.append(
-                f"Hosel goal (priority): loft Δ **{needed_loft:+.2f}°**, then lie Δ **{needed_lie:+.2f}°**."
-            )
-
+            recos.append(f"Hosel goal (priority): loft Δ **{needed_loft:+.2f}°**, then lie Δ **{needed_lie:+.2f}°**.")
             if reco["type"] == "exact":
                 r = reco["recommended"]
                 recos.append(
@@ -448,13 +457,9 @@ for bucket in selected_buckets:
             else:
                 recos.append(reco["message"])
 
-    # FW/HY message (hosel recos can be added later once charts are encoded)
+    # FW/HY: we capture settings + show estimates when possible (future = auto-hosel recos)
     if bucket in {"FW", "HY"}:
-        recos.append("Hosel: FW/HY settings are captured in the UI. Exact one-setting recommendations will improve as we encode more model-specific charts.")
-
-    # General advice
-    if bucket == "DR" and not np.isnan(smash_avg) and smash_avg < 1.45:
-        recos.append("Efficiency: focus on center contact (tee height, strike). Low smash is a limiting factor.")
+        recos.append("FW/HY: hosel settings are captured above. FitCaddie shows estimated launch/spin change when exact deltas are available.")
 
     for r in recos:
         st.write("•", r)

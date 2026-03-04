@@ -2,42 +2,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Literal
+from typing import Dict, List, Optional, Literal, Tuple
 
 Handedness = Literal["RH", "LH"]
 
 @dataclass(frozen=True)
 class HoselSettingDelta:
-    loft_deg: Optional[float] = None   # relative to stated setting (effective loft)
-    lie_deg: Optional[float] = None    # + upright, - flat
-    face_deg: Optional[float] = None   # + closed, - open (rarely encoded)
-    note: str = ""
+    loft_deg: Optional[float] = None      # + adds loft, - reduces loft
+    lie_deg: Optional[float] = None       # + more upright, - flatter
+    face_deg: Optional[float] = None      # + more closed, - more open
+    note: str = ""                        # any human-readable caveats
 
 @dataclass(frozen=True)
 class HoselSystem:
     system_name: str
-    family: str
+    family: str  # "matrix", "dual_cog", "sleeve_12", "sleeve_8", "futurefit33", etc.
     settings_rh: List[str]
     settings_lh: List[str]
     deltas_rh: Dict[str, HoselSettingDelta]
     deltas_lh: Dict[str, HoselSettingDelta]
-    loft_range_deg: Optional[Tuple[float, float]] = None
+    loft_range_deg: Optional[Tuple[float, float]] = None   # (min, max) relative adjust
     lie_range_deg: Optional[Tuple[float, float]] = None
     face_range_deg: Optional[Tuple[float, float]] = None
     notes: str = ""
 
-def _matrix_16() -> List[str]:
-    return [
-        "A1","A2","A3","A4",
-        "B1","B2","B3","B4",
-        "C1","C2","C3","C4",
-        "D1","D2","D3","D4",
-    ]
 
 # ---------------------------
 # Titleist SureFit (Driver/FW)
 # ---------------------------
-# Titleist confirms driver/fairway SureFit increments are 0.75° loft/lie. :contentReference[oaicite:7]{index=7}
 TITLEIST_SUREFIT_DF_RH_DELTAS: Dict[str, HoselSettingDelta] = {
     "A1": HoselSettingDelta(0.00, 0.00, None, "Standard"),
     "A2": HoselSettingDelta(0.00, +1.50, None, "Upright"),
@@ -60,129 +52,132 @@ TITLEIST_SUREFIT_DF_RH_DELTAS: Dict[str, HoselSettingDelta] = {
     "D4": HoselSettingDelta(+0.75, 0.00, None, "Slight higher"),
 }
 
-# For MVP we avoid encoding LH SureFit deltas unless you want the full LH chart.
-TITLEIST_SUREFIT_DF_LH_DELTAS = {s: HoselSettingDelta(None, None, None, "LH mapping not encoded; treat as range-only.") for s in _matrix_16()}
+TITLEIST_SUREFIT_DF_LH_LABELS = [
+    "A1","A2","A3","A4","B1","B2","B3","B4","C1","C2","C3","C4","D1","D2","D3","D4"
+]
+TITLEIST_SUREFIT_DF_LH_DELTAS: Dict[str, HoselSettingDelta] = {
+    s: HoselSettingDelta(None, None, None, "LH SureFit mapping not encoded; treat as range-only.")
+    for s in TITLEIST_SUREFIT_DF_LH_LABELS
+}
 
 TITLEIST_SUREFIT_DRIVER_FAIRWAY = HoselSystem(
     system_name="Titleist SureFit (Driver/Fairway)",
     family="matrix_16",
-    settings_rh=_matrix_16(),
-    settings_lh=_matrix_16(),
+    settings_rh=list(TITLEIST_SUREFIT_DF_RH_DELTAS.keys()),
+    settings_lh=TITLEIST_SUREFIT_DF_LH_LABELS,
     deltas_rh=TITLEIST_SUREFIT_DF_RH_DELTAS,
     deltas_lh=TITLEIST_SUREFIT_DF_LH_DELTAS,
     loft_range_deg=(-0.75, +1.50),
     lie_range_deg=(-0.75, +1.50),
-    notes="Driver/FW SureFit: 0.75° loft/lie increments. Exact LH mapping not encoded (safe MVP).",
-)
-
-# ---------------------------
-# Titleist SureFit (Hybrid)
-# ---------------------------
-# Titleist confirms hybrid SureFit uses 1° increments. :contentReference[oaicite:8]{index=8}
-# Exact A1..D4 delta map varies by chart; MVP keeps settings selectable but uses range-based translation.
-TITLEIST_SUREFIT_HYBRID = HoselSystem(
-    system_name="Titleist SureFit (Hybrid)",
-    family="matrix_16_range_only",
-    settings_rh=_matrix_16(),
-    settings_lh=_matrix_16(),
-    deltas_rh={s: HoselSettingDelta(None, None, None, "Hybrid chart not encoded; range-only.") for s in _matrix_16()},
-    deltas_lh={s: HoselSettingDelta(None, None, None, "Hybrid chart not encoded; range-only.") for s in _matrix_16()},
-    loft_range_deg=(-1.0, +2.0),
-    lie_range_deg=(-1.0, +2.0),
-    notes="Hybrid SureFit: 1° increments. Use range-only until chart is encoded.",
+    face_range_deg=None,
+    notes="Driver/FW uses 0.75° increments. RH chart encoded. LH treated as range-only.",
 )
 
 # ---------------------------
 # Callaway OptiFit (8 combos)
 # ---------------------------
-# Callaway says OptiFit provides 8 loft/lie combinations. :contentReference[oaicite:9]{index=9}
-CALLAWAY_OPTIFIT_SETTINGS = ["-1 N", "S N", "+1 N", "+2 N", "-1 D", "S D", "+1 D", "+2 D"]
+CALLAWAY_OPTIFIT_RH_SETTINGS = [
+    "-1 N", "S N", "+1 N", "+2 N",
+    "-1 D", "S D", "+1 D", "+2 D"
+]
 CALLAWAY_OPTIFIT_DELTAS = {
-    "-1 N": HoselSettingDelta(-1.0, 0.0, None, ""),
-    "S N":  HoselSettingDelta(0.0,  0.0, None, "Stated loft"),
-    "+1 N": HoselSettingDelta(+1.0, 0.0, None, ""),
-    "+2 N": HoselSettingDelta(+2.0, 0.0, None, ""),
-    "-1 D": HoselSettingDelta(-1.0, +1.0, None, "Draw/upright (approx)"),
-    "S D":  HoselSettingDelta(0.0,  +1.0, None, "Draw/upright (approx)"),
-    "+1 D": HoselSettingDelta(+1.0, +1.0, None, "Draw/upright (approx)"),
-    "+2 D": HoselSettingDelta(+2.0, +1.0, None, "Draw/upright (approx)"),
+    "-1 N": HoselSettingDelta(-1.0, 0.0, None, "Neutral lie"),
+    "S N":  HoselSettingDelta(0.0,  0.0, None, "Stated loft, neutral lie"),
+    "+1 N": HoselSettingDelta(+1.0, 0.0, None, "Neutral lie"),
+    "+2 N": HoselSettingDelta(+2.0, 0.0, None, "Neutral lie"),
+    "-1 D": HoselSettingDelta(-1.0, +1.0, None, "Draw/upright lie (approx)"),
+    "S D":  HoselSettingDelta(0.0,  +1.0, None, "Draw/upright lie (approx)"),
+    "+1 D": HoselSettingDelta(+1.0, +1.0, None, "Draw/upright lie (approx)"),
+    "+2 D": HoselSettingDelta(+2.0, +1.0, None, "Draw/upright lie (approx)"),
 }
+
 CALLAWAY_OPTIFIT = HoselSystem(
     system_name="Callaway OptiFit",
     family="dual_cog_8",
-    settings_rh=CALLAWAY_OPTIFIT_SETTINGS,
-    settings_lh=CALLAWAY_OPTIFIT_SETTINGS,
+    settings_rh=CALLAWAY_OPTIFIT_RH_SETTINGS,
+    settings_lh=CALLAWAY_OPTIFIT_RH_SETTINGS,
     deltas_rh=CALLAWAY_OPTIFIT_DELTAS,
     deltas_lh=CALLAWAY_OPTIFIT_DELTAS,
     loft_range_deg=(-1.0, +2.0),
     lie_range_deg=(0.0, +1.0),
-    notes="OptiFit: upper cog loft (-1/S/+1/+2), lower cog lie (N/D).",
+    notes="Upper cog controls loft; lower cog sets lie (Neutral vs Draw).",
 )
 
 # ---------------------------
-# PING Trajectory Tuning 2.0 (8 pos)
+# TaylorMade Loft Sleeve (12 pos) — range-only
 # ---------------------------
-# PING fairway woods: 8-position hosel; ±1.5° loft, lie up to 3° flatter. :contentReference[oaicite:10]{index=10}
+TM_LOFT_SLEEVE_12 = HoselSystem(
+    system_name="TaylorMade Loft Sleeve (12-position)",
+    family="sleeve_12",
+    settings_rh=["STD", "LOWER", "HIGHER", "UPRIGHT", "STD (alt)"] + [f"POS{i}" for i in range(1, 9)],
+    settings_lh=["STD", "LOWER", "HIGHER", "UPRIGHT", "STD (alt)"] + [f"POS{i}" for i in range(1, 9)],
+    deltas_rh={},  # range-only (varies by generation)
+    deltas_lh={},
+    loft_range_deg=(-2.0, +2.0),
+    lie_range_deg=(0.0, +4.0),
+    face_range_deg=None,
+    notes="Range-only unless you encode a model/year-specific chart.",
+)
+
+# ---------------------------
+# Ping Trajectory Tuning 2.0 (8 pos)
+# ---------------------------
 PING_TT2 = HoselSystem(
     system_name="PING Trajectory Tuning 2.0 (8-position)",
-    family="sleeve_8_range",
+    family="sleeve_8",
     settings_rh=["STD", "+0.5", "+1.0", "+1.5", "-0.5", "-1.0", "-1.5", "FLAT"],
     settings_lh=["STD", "+0.5", "+1.0", "+1.5", "-0.5", "-1.0", "-1.5", "FLAT"],
     deltas_rh={
-        "STD": HoselSettingDelta(0.0, 0.0, None, ""),
-        "+0.5": HoselSettingDelta(+0.5, None, None, "Lie varies by sleeve; range-only"),
-        "+1.0": HoselSettingDelta(+1.0, None, None, "Lie varies by sleeve; range-only"),
-        "+1.5": HoselSettingDelta(+1.5, None, None, "Lie varies by sleeve; range-only"),
-        "-0.5": HoselSettingDelta(-0.5, None, None, "Lie varies by sleeve; range-only"),
-        "-1.0": HoselSettingDelta(-1.0, None, None, "Lie varies by sleeve; range-only"),
-        "-1.5": HoselSettingDelta(-1.5, None, None, "Lie varies by sleeve; range-only"),
+        "STD":  HoselSettingDelta(0.0, 0.0, None, ""),
+        "+0.5": HoselSettingDelta(+0.5, None, None, "Lie varies; range-only"),
+        "+1.0": HoselSettingDelta(+1.0, None, None, "Lie varies; range-only"),
+        "+1.5": HoselSettingDelta(+1.5, None, None, "Lie varies; range-only"),
+        "-0.5": HoselSettingDelta(-0.5, None, None, "Lie varies; range-only"),
+        "-1.0": HoselSettingDelta(-1.0, None, None, "Lie varies; range-only"),
+        "-1.5": HoselSettingDelta(-1.5, None, None, "Lie varies; range-only"),
         "FLAT": HoselSettingDelta(0.0, -3.0, None, "Up to 3° flatter than std (range-based)"),
     },
     deltas_lh={},
     loft_range_deg=(-1.5, +1.5),
     lie_range_deg=(-3.0, 0.0),
-    notes="PING TT2: loft ±1.5°, lie includes flat option.",
+    notes="Ping labels differ slightly by gen; keep enums simple.",
 )
 
 # ---------------------------
-# Cobra MyFly (8 settings)
+# Cobra MyFly + FutureFit33 — range-only
 # ---------------------------
-# Cobra says MyFly: 8 loft settings; spin changes up to ±450 rpm. :contentReference[oaicite:11]{index=11}
 COBRA_MYFLY = HoselSystem(
-    system_name="Cobra MyFly (8 settings)",
-    family="myfly_8_range",
-    settings_rh=[f"Setting {i}" for i in range(1, 9)],
-    settings_lh=[f"Setting {i}" for i in range(1, 9)],
+    system_name="Cobra MyFly (8 loft settings)",
+    family="myfly_8",
+    settings_rh=["Setting 1","Setting 2","Setting 3","Setting 4","Setting 5","Setting 6","Setting 7","Setting 8"],
+    settings_lh=["Setting 1","Setting 2","Setting 3","Setting 4","Setting 5","Setting 6","Setting 7","Setting 8"],
     deltas_rh={},
     deltas_lh={},
     loft_range_deg=(-1.0, +1.0),
-    notes="MyFly labels differ by head loft; MVP uses generic setting list.",
+    notes="Labels differ by head loft; range-only.",
 )
 
-# ---------------------------
-# TaylorMade Loft Sleeve (12 pos) — range-based
-# ---------------------------
-# TM manual: 12 positions; each click changes loft 0.5–0.75°, lie 0.5–0.75°, face 1–2°. :contentReference[oaicite:12]{index=12}
-TM_LOFT_SLEEVE_12 = HoselSystem(
-    system_name="TaylorMade Loft Sleeve (12-position)",
-    family="sleeve_12_range",
-    settings_rh=["STD"] + [f"POS{i}" for i in range(1, 12)],
-    settings_lh=["STD"] + [f"POS{i}" for i in range(1, 12)],
+COBRA_FUTUREFIT33 = HoselSystem(
+    system_name="Cobra FutureFit33 (33 unique settings)",
+    family="futurefit33",
+    settings_rh=[f"FF33-{i:02d}" for i in range(1, 34)],
+    settings_lh=[f"FF33-{i:02d}" for i in range(1, 34)],
     deltas_rh={},
     deltas_lh={},
     loft_range_deg=(-2.0, +2.0),
-    lie_range_deg=(-1.0, +1.0),
-    face_range_deg=(-2.0, +2.0),
-    notes="TM: chart varies by model/year; use range-based until we encode model-specific chart.",
+    lie_range_deg=(-2.0, +2.0),
+    notes="Range-only unless you encode the full 33-setting chart.",
 )
 
-# Registry: brand -> systems
+# ---------------------------
+# Registry: brand -> system(s)
+# ---------------------------
 HOSEL_SYSTEMS_BY_BRAND: Dict[str, List[HoselSystem]] = {
-    "Titleist": [TITLEIST_SUREFIT_DRIVER_FAIRWAY, TITLEIST_SUREFIT_HYBRID],
+    "Titleist": [TITLEIST_SUREFIT_DRIVER_FAIRWAY],
     "Callaway": [CALLAWAY_OPTIFIT],
-    "PING": [PING_TT2],
-    "Cobra": [COBRA_MYFLY],
     "TaylorMade": [TM_LOFT_SLEEVE_12],
+    "PING": [PING_TT2],
+    "Cobra": [COBRA_MYFLY, COBRA_FUTUREFIT33],
 }
 
 def get_supported_brands() -> List[str]:
@@ -207,13 +202,14 @@ def translate_setting(brand: str, system_name: str, setting: str, handedness: Ha
     sys = get_system(brand, system_name)
     if not sys:
         return HoselSettingDelta(None, None, None, note="Brand/system not found.")
+
     deltas = sys.deltas_rh if handedness == "RH" else sys.deltas_lh
-    if setting in deltas and (deltas[setting].loft_deg is not None or deltas[setting].lie_deg is not None):
+    if setting in deltas:
         return deltas[setting]
-    # range-only fallback
+
     return HoselSettingDelta(
         None, None, None,
-        note=f"Exact delta not encoded. System ranges: loft={sys.loft_range_deg}, lie={sys.lie_range_deg}."
+        note=f"No exact delta stored. System ranges: loft={sys.loft_range_deg}, lie={sys.lie_range_deg}, face={sys.face_range_deg}"
     )
 
 def system_ranges(brand: str, system_name: str) -> Dict[str, Optional[Tuple[float, float]]]:

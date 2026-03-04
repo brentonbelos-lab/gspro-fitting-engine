@@ -553,7 +553,7 @@ def recommend_titleist_surefit_driver(
             "expected": {},
         }
 
-    launch = summary.metrics.get("launch", float("nan"))
+    launch = summary.metrics.get("launch", summary.metrics.get("launch_vla", float("nan")))
     spin = summary.metrics.get("spin", float("nan"))
 
     # ---- Decide loft target using swing-speed launch windows ----

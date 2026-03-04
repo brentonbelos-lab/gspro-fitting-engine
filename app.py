@@ -222,6 +222,16 @@ elif club_id.endswith("W"):
 else:
     default_loft = 0.0
 
+# Smart default loft by club type
+if club_id == "DR":
+    default_loft = 10.0
+elif club_id.endswith("H"):
+    default_loft = 18.0
+elif club_id.endswith("W"):
+    default_loft = 15.0
+else:
+    default_loft = 0.0
+
 stated_loft = st.number_input(
     f"{club_id} Stated Loft (°)",
     min_value=0.0,

@@ -3,6 +3,7 @@
 
 import streamlit as st
 import pandas as pd
+import json
 
 from fit_engine import analyze_dataframe, session_to_dict
 
@@ -222,7 +223,7 @@ st.divider()
 st.subheader("Export")
 st.download_button(
     label="Download analysis JSON",
-    data=pd.io.json.dumps(payload, indent=2),
+    data=json.dumps(payload, indent=2, default=str),
     file_name="fitcaddie_analysis.json",
     mime="application/json",
 )

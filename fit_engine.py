@@ -461,6 +461,7 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
     club_results: Dict[str, ClubAnalysis] = {}
 
    for club_raw, df_club in df.groupby("club", dropna=False):
+
     bucket = _club_bucket(club_raw)
     if bucket not in {"DR", "3W", "HY"}:
         continue
@@ -499,10 +500,8 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         limiting_factors=factors,
         recommendations=recs,
     )
-
     return SessionResult(club_results=club_results)
-
-
+       
 def session_to_dict(result: SessionResult) -> Dict[str, object]:
     """
     Convert dataclasses to JSON-serializable dict for Streamlit.

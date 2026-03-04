@@ -1,174 +1,228 @@
-# app.py
-import pandas as pd
+# app.py — FitCaddie (GSPro Club Fitting Engine MVP)
+# Works with the full fit_engine.py I provided (imports: analyze_dataframe, session_to_dict)
+
 import streamlit as st
+import pandas as pd
 
 from fit_engine import analyze_dataframe, session_to_dict
 
-st.set_page_config(page_title="GSPro Fitting Engine (MVP)", layout="wide")
 
-st.title("GSPro Club Fitting Engine (Spec-Range MVP)")
+# -----------------------------
+# Page config + simple styling
+# -----------------------------
+st.set_page_config(
+    page_title="FitCaddie",
+    page_icon="⛳",
+    layout="wide",
+)
+
+st.title("FitCaddie")
 st.caption("Upload a GSPro CSV export and get spec-range recommendations (settings → shaft → head category).")
 
-uploaded = st.file_uploader("Upload GSPro CSV", type=["csv"])
+st.markdown(
+    """
+**What you’ll get:**
+- Key averages (carry, ball speed, launch, spin, dispersion)
+- Variability (consistency)
+- Limiting factors (what’s holding you back)
+- “What to test” spec-range recommendations
 
-st.sidebar.header("Options")
-show_raw = st.sidebar.checkbox("Show raw uploaded data", value=False)
-show_cleaning_notes = st.sidebar.checkbox("Show cleaning notes", value=True)
+*Current MVP supports DR (driver), 3W (fairway), HY (hybrid) from GSPro CSV exports.*
+"""
+)
 
-if uploaded is None:
-    st.info("Upload a GSPro CSV to begin.")
+
+# -----------------------------
+# Helpers
+# -----------------------------
+def _fmt_num(x, nd=1):
+    try:
+        if x is None:
+            return "—"
+        if isinstance(x, str):
+            return x
+        if pd.isna(x):
+            return "—"
+        return f"{float(x):.{nd}f}"
+    except Exception:
+        return "—"
+
+
+def _fmt_int(x):
+    try:
+        if x is None or pd.isna(x):
+            return "—"
+        return f"{int(round(float(x)))}"
+    except Exception:
+        return "—"
+
+
+def _club_label(code: str) -> str:
+    return {"DR": "Driver", "3W": "Fairway Wood", "HY": "Hybrid"}.get(code, code)
+
+
+def _confidence_badge(conf: str) -> str:
+    conf = (conf or "").upper()
+    if conf == "HIGH":
+        return "🟢 HIGH"
+    if conf == "MED":
+        return "🟠 MED"
+    return "🔴 LOW"
+
+
+# -----------------------------
+# Upload
+# -----------------------------
+st.subheader("Upload GSPro CSV")
+uploaded = st.file_uploader("Upload a GSPro CSV export", type=["csv"])
+
+if not uploaded:
     st.stop()
 
-# Read CSV
-df = pd.read_csv(uploaded)
-
-st.write("Columns after canonicalization:")
-st.write("Detected Columns:")
-if show_raw:
-    st.subheader("Raw Data (first 200 rows)")
-    st.dataframe(df.head(200), use_container_width=True)
+try:
+    df = pd.read_csv(uploaded)
+except Exception as e:
+    st.error(f"Could not read CSV: {e}")
+    st.stop()
 
 # Run engine
 try:
     result = analyze_dataframe(df)
-    out = session_to_dict(result)
+    payload = session_to_dict(result)
 except Exception as e:
     st.error(f"Could not analyze file: {e}")
     st.stop()
 
-clubs = out["clubs"]
+clubs = payload.get("clubs", {})
 if not clubs:
-    st.warning("No supported clubs found (v1 supports: Driver (DR), 3-Wood (3W), Hybrids (H* / HY)).")
+    st.warning("No supported clubs found in this CSV (supported: DR, 3W, HY).")
     st.stop()
 
-# Overview
+
+# -----------------------------
+# Club Overview
+# -----------------------------
 st.subheader("Club Overview")
+
 cols = st.columns(len(clubs))
-for i, (club, payload) in enumerate(clubs.items()):
-    s = payload["summary"]
-    m = s["metrics"]
-    with cols[i]:
-        st.metric(f"{club} (Confidence: {s['confidence']})", f"{s['n_used']}/{s['n_total']} shots used")
-        st.write(
-            f"- **Carry:** {m.get('carry', float('nan')):.1f}\n"
-            f"- **Ball Speed:** {m.get('ball_speed', float('nan')):.1f}\n"
-            f"- **Club Speed:** {m.get('club_speed', float('nan')):.1f}\n"
-            f"- **Launch:** {m.get('launch_vla', float('nan')):.1f}°\n"
-            f"- **Spin:** {m.get('spin', float('nan')):.0f} rpm\n"
-            f"- **Offline Mean:** {m.get('offline_mean', float('nan')):.1f}"
-        )
+for idx, (club_code, club_data) in enumerate(sorted(clubs.items(), key=lambda kv: kv[0])):
+    summary = club_data.get("summary", {})
+    metrics = summary.get("metrics", {})
+    conf = summary.get("confidence", "LOW")
+    n_used = summary.get("n_used", 0)
+    n_total = summary.get("n_total", 0)
 
+    with cols[idx]:
+        st.markdown(f"#### {_club_label(club_code)} ({_confidence_badge(conf)})")
+        st.markdown(f"**{n_used}/{n_total} shots used**")
+
+        carry = metrics.get("carry")
+        ball_speed = metrics.get("ball_speed")
+        club_speed = metrics.get("club_speed")
+
+        # launch may be under launch or launch_vla
+        launch = metrics.get("launch")
+        if launch is None or (isinstance(launch, float) and pd.isna(launch)):
+            launch = metrics.get("launch_vla")
+
+        spin = metrics.get("spin")
+        offline_mean = metrics.get("offline_mean")
+
+        st.write(f"• **Carry:** {_fmt_num(carry, 1)} yd")
+        st.write(f"• **Ball Speed:** {_fmt_num(ball_speed, 1)} mph")
+        st.write(f"• **Club Speed:** {_fmt_num(club_speed, 1)} mph")
+        st.write(f"• **Launch:** {_fmt_num(launch, 1)}°")
+        st.write(f"• **Spin:** {_fmt_int(spin)} rpm")
+        st.write(f"• **Offline Mean:** {_fmt_num(offline_mean, 1)} yd")
+
+
+# -----------------------------
+# Details section
+# -----------------------------
 st.divider()
+tabs = st.tabs([f"{code} Details" for code in sorted(clubs.keys())])
 
-# Club detail tabs
-tab_names = list(clubs.keys())
-tabs = st.tabs([f"{c} Details" for c in tab_names])
-
-for tab, club in zip(tabs, tab_names):
-    payload = clubs[club]
-    s = payload["summary"]
-    m = s["metrics"]
-    v = s["variability"]
+for tab, club_code in zip(tabs, sorted(clubs.keys())):
+    club_data = clubs[club_code]
+    summary = club_data.get("summary", {})
+    metrics = summary.get("metrics", {})
+    variability = summary.get("variability", {})
+    limiting = club_data.get("limiting_factors", [])
+    recs = club_data.get("recommendations", [])
 
     with tab:
-        left, right = st.columns([1, 1])
+        left, right = st.columns([1.05, 0.95], gap="large")
 
         with left:
-            st.markdown(f"### {club} Summary")
-            st.write(f"**Shots used:** {s['n_used']} / {s['n_total']}  |  **Confidence:** {s['confidence']}")
-            st.markdown("**Key metrics**")
-            metric_table = pd.DataFrame(
-                {
-                    "Metric": ["Carry", "Total", "Ball Speed", "Club Speed", "Smash", "Launch (VLA)", "Spin", "AoA", "Path", "Face-to-Path", "Descent"],
-                    "Value": [
-                        m.get("carry"), m.get("total"), m.get("ball_speed"), m.get("club_speed"), m.get("smash"),
-                        m.get("launch_vla"), m.get("spin"), m.get("aoa"), m.get("path"), m.get("face_to_path"), m.get("descent")
-                    ],
-                }
-            )
-            st.dataframe(metric_table, hide_index=True, use_container_width=True)
+            st.markdown(f"### {_club_label(club_code)} Summary")
+            st.caption(f"Shots used: {summary.get('n_used', 0)} / {summary.get('n_total', 0)}  |  Confidence: {summary.get('confidence', 'LOW')}")
 
-            st.markdown("**Variability (consistency)**")
-            var_table = pd.DataFrame(
-                {
-                    "Metric": ["Offline Std", "Launch Std", "Spin Std", "Face-to-Path Std", "Path Std", "Ball Speed Std"],
-                    "Std Dev": [
-                        v.get("offline_std"), v.get("launch_std"), v.get("spin_std"),
-                        v.get("face_to_path_std"), v.get("path_std"), v.get("ball_speed_std"),
-                    ],
-                }
-            )
-            st.dataframe(var_table, hide_index=True, use_container_width=True)
+            # Key metrics table
+            key_rows = [
+                ("Carry (yd)", metrics.get("carry")),
+                ("Total (yd)", metrics.get("total")),
+                ("Ball Speed (mph)", metrics.get("ball_speed")),
+                ("Club Speed (mph)", metrics.get("club_speed")),
+                ("Smash", metrics.get("smash")),
+                ("Launch (VLA°)", metrics.get("launch_vla") if metrics.get("launch_vla") is not None else metrics.get("launch")),
+                ("Spin (rpm)", metrics.get("spin")),
+                ("Spin Axis", metrics.get("spin_axis")),
+                ("AoA", metrics.get("aoa")),
+                ("Path", metrics.get("path")),
+                ("Face-to-Path", metrics.get("face_to_path")),
+                ("Descent", metrics.get("descent")),
+                ("Peak Height", metrics.get("peak_height")),
+                ("Offline Mean (yd)", metrics.get("offline_mean")),
+                ("Offline |abs| Mean (yd)", metrics.get("offline_abs_mean")),
+            ]
+            key_df = pd.DataFrame(key_rows, columns=["Metric", "Value"])
+            key_df["Value"] = key_df["Value"].apply(lambda v: _fmt_num(v, 2))
+            st.dataframe(key_df, use_container_width=True, hide_index=True)
+
+            st.markdown("### Variability (consistency)")
+            var_rows = [(k, v) for k, v in variability.items()]
+            if var_rows:
+                var_df = pd.DataFrame(var_rows, columns=["Metric", "Std Dev"])
+                var_df["Std Dev"] = var_df["Std Dev"].apply(lambda v: _fmt_num(v, 2))
+                st.dataframe(var_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No variability metrics available yet.")
 
         with right:
             st.markdown("### Limiting Factors")
-            lf = payload["limiting_factors"]
-            if lf:
-                for item in lf:
-                    st.write(f"• {item}")
+            if limiting:
+                for f in limiting:
+                    st.write(f"• {f}")
             else:
-                st.success("No major limiting factors flagged for v1 targets.")
+                st.write("• No major limiting factors detected.")
 
             st.markdown("### Recommendations (Spec Ranges)")
-            for r in payload["recommendations"]:
-                with st.expander(f"{r['priority']}. {r['title']}  ({r['confidence']})", expanded=(r["priority"] <= 2)):
-                    st.write(r["rationale"])
-                    st.code(r["spec"], language="json")
+            if not recs:
+                st.info("No recommendations available yet.")
+            else:
+                # sort by priority if present
+                recs_sorted = sorted(recs, key=lambda r: r.get("priority", 999))
+                for r in recs_sorted:
+                    title = r.get("title", "Recommendation")
+                    rationale = r.get("rationale", "")
+                    conf = r.get("confidence", "")
+                    spec = r.get("spec", {})
 
-        st.divider()
-        st.markdown("### Quick Plots")
+                    with st.expander(f"{title} ({conf})", expanded=True):
+                        if rationale:
+                            st.write(rationale)
+                        if spec:
+                            st.code(spec, language="python")
 
-        # Basic plots if columns exist in raw df
-        # We'll map club rows from uploaded df for simple visualizations
-        # Note: v1 keeps plots simple; later you can add dispersion ellipses.
-        df_local = df.copy()
-        if "Club" in df_local.columns:
-            club_col = "Club"
-        elif "club" in df_local.columns:
-            club_col = "club"
-        else:
-            club_col = None
 
-        if club_col:
-            df_local[club_col] = df_local[club_col].astype(str).str.upper().str.strip()
-
-            # Attempt to select same bucket
-            if club == "DR":
-                df_plot = df_local[df_local[club_col] == "DR"]
-            elif club == "3W":
-                df_plot = df_local[df_local[club_col].isin(["3W", "FW", "W3"])]
-            else:  # HY
-                df_plot = df_local[df_local[club_col].str.startswith("H") | df_local[club_col].str.contains("HY", na=False)]
-
-            # Canonicalize plot columns
-            from fit_engine import _canonicalize_columns  # internal
-            df_plot = _canonicalize_columns(df_plot)
-            for col in ["carry", "offline", "spin", "vla", "ball_speed", "club_speed"]:
-                if col in df_plot.columns:
-                    df_plot[col] = pd.to_numeric(df_plot[col], errors="coerce")
-
-            plot_cols = st.columns(2)
-
-            with plot_cols[0]:
-                if "offline" in df_plot.columns and "carry" in df_plot.columns:
-                    st.scatter_chart(df_plot[["offline", "carry"]].dropna(), x="offline", y="carry")
-                else:
-                    st.info("Need Offline + Carry columns for dispersion plot.")
-
-            with plot_cols[1]:
-                if "spin" in df_plot.columns and "vla" in df_plot.columns:
-                    st.scatter_chart(df_plot[["vla", "spin"]].dropna(), x="vla", y="spin")
-                else:
-                    st.info("Need VLA + Spin columns for launch/spin plot.")
-        else:
-            st.info("Could not detect club column for plotting.")
-
-# Download JSON output
+# -----------------------------
+# Export
+# -----------------------------
 st.divider()
 st.subheader("Export")
 st.download_button(
-    label="Download analysis as JSON",
-    data=pd.Series(out).to_json(),
-    file_name="fit_analysis.json",
+    label="Download analysis JSON",
+    data=pd.io.json.dumps(payload, indent=2),
+    file_name="fitcaddie_analysis.json",
     mime="application/json",
 )

@@ -104,43 +104,113 @@ CALLAWAY_OPTIFIT = HoselSystem(
 )
 
 # ---------------------------
-# TaylorMade Loft Sleeve (12 pos) — range-only
+# TaylorMade 4° Loft Sleeve (12-position) — EXACT deltas (modern adapter family)
 # ---------------------------
+# TaylorMade tuning chart shows 12 positions with explicit face angle, loft delta, and lie angle.
+# We encode these as deltas relative to STD LOFT baseline (lie=56° at STD LOFT). :contentReference[oaicite:4]{index=4}
 TM_LOFT_SLEEVE_12 = HoselSystem(
     system_name="TaylorMade Loft Sleeve (12-position)",
     family="sleeve_12",
-    settings_rh=["STD", "LOWER", "HIGHER", "UPRIGHT", "STD (alt)"] + [f"POS{i}" for i in range(1, 9)],
-    settings_lh=["STD", "LOWER", "HIGHER", "UPRIGHT", "STD (alt)"] + [f"POS{i}" for i in range(1, 9)],
-    deltas_rh={},  # range-only (varies by generation)
-    deltas_lh={},
+    settings_rh=[
+        "STD LOFT",
+        "+0.75", "+1.5", "+2.0",
+        "+1.5 UPRT", "+0.75 UPRT",
+        "UPRT",
+        "-0.75 UPRT", "-1.5 UPRT",
+        "-2.0", "-1.5", "-0.75",
+    ],
+    settings_lh=[
+        "STD LOFT",
+        "+0.75", "+1.5", "+2.0",
+        "+1.5 UPRT", "+0.75 UPRT",
+        "UPRT",
+        "-0.75 UPRT", "-1.5 UPRT",
+        "-2.0", "-1.5", "-0.75",
+    ],
+    deltas_rh={
+        # Baseline
+        "STD LOFT":      HoselSettingDelta(0.0,   0.0,   0.0,  "Square face, stated loft, 56° lie baseline"),
+
+        # Closed (draw) side
+        "+0.75":         HoselSettingDelta(+0.75, +0.5,  +1.5, "1.5° closed; lie 56.5°"),
+        "+1.5":          HoselSettingDelta(+1.5,  +1.25, +3.0, "3° closed; lie 57.25°"),
+        "+2.0":          HoselSettingDelta(+2.0,  +2.0,  +4.0, "4° closed; lie 58°"),
+
+        "+1.5 UPRT":     HoselSettingDelta(+1.5,  +2.75, +3.0, "3° closed; lie 58.75°"),
+        "+0.75 UPRT":    HoselSettingDelta(+0.75, +3.5,  +1.5, "1.5° closed; lie 59.5°"),
+
+        # Upright anchor
+        "UPRT":          HoselSettingDelta(0.0,   +4.0,  0.0,  "Square face, stated loft, 60° lie"),
+
+        # Open (fade) side
+        "-0.75 UPRT":    HoselSettingDelta(-0.75, +3.5,  -1.5, "1.5° open; lie 59.5°"),
+        "-1.5 UPRT":     HoselSettingDelta(-1.5,  +2.75, -3.0, "3° open; lie 58.75°"),
+
+        "-2.0":          HoselSettingDelta(-2.0,  +2.0,  -4.0, "4° open; lie 58°"),
+        "-1.5":          HoselSettingDelta(-1.5,  +1.25, -3.0, "3° open; lie 57.25°"),
+        "-0.75":         HoselSettingDelta(-0.75, +0.5,  -1.5, "1.5° open; lie 56.5°"),
+    },
+    deltas_lh={
+        # MVP: mirror same numeric deltas for LH (face direction still “open/closed” relative to target line).
+        "STD LOFT":      HoselSettingDelta(0.0,   0.0,   0.0,  "Square face, stated loft, 56° lie baseline"),
+        "+0.75":         HoselSettingDelta(+0.75, +0.5,  +1.5, "1.5° closed; lie 56.5°"),
+        "+1.5":          HoselSettingDelta(+1.5,  +1.25, +3.0, "3° closed; lie 57.25°"),
+        "+2.0":          HoselSettingDelta(+2.0,  +2.0,  +4.0, "4° closed; lie 58°"),
+        "+1.5 UPRT":     HoselSettingDelta(+1.5,  +2.75, +3.0, "3° closed; lie 58.75°"),
+        "+0.75 UPRT":    HoselSettingDelta(+0.75, +3.5,  +1.5, "1.5° closed; lie 59.5°"),
+        "UPRT":          HoselSettingDelta(0.0,   +4.0,  0.0,  "Square face, stated loft, 60° lie"),
+        "-0.75 UPRT":    HoselSettingDelta(-0.75, +3.5,  -1.5, "1.5° open; lie 59.5°"),
+        "-1.5 UPRT":     HoselSettingDelta(-1.5,  +2.75, -3.0, "3° open; lie 58.75°"),
+        "-2.0":          HoselSettingDelta(-2.0,  +2.0,  -4.0, "4° open; lie 58°"),
+        "-1.5":          HoselSettingDelta(-1.5,  +1.25, -3.0, "3° open; lie 57.25°"),
+        "-0.75":         HoselSettingDelta(-0.75, +0.5,  -1.5, "1.5° open; lie 56.5°"),
+    },
     loft_range_deg=(-2.0, +2.0),
     lie_range_deg=(0.0, +4.0),
-    face_range_deg=None,
-    notes="Range-only unless you encode a model/year-specific chart.",
+    face_range_deg=(-4.0, +4.0),
+    notes="Exact 12-position 4° sleeve deltas encoded from TaylorMade tuning chart (SIM/Stealth/Qi-family sleeve behavior). :contentReference[oaicite:5]{index=5}",
 )
 
 # ---------------------------
-# Ping Trajectory Tuning 2.0 (8 pos)
+# Ping Trajectory Tuning 2.0 (8 pos) — EXACT deltas
 # ---------------------------
+# Chart shows 8 settings with explicit Loft Adj and Avg Lie:
+# O (neutral), Big+/Big-, Small+/Small-, and Flat options (F, F-, F+). :contentReference[oaicite:2]{index=2}
 PING_TT2 = HoselSystem(
     system_name="PING Trajectory Tuning 2.0 (8-position)",
     family="sleeve_8",
-    settings_rh=["STD", "+0.5", "+1.0", "+1.5", "-0.5", "-1.0", "-1.5", "FLAT"],
-    settings_lh=["STD", "+0.5", "+1.0", "+1.5", "-0.5", "-1.0", "-1.5", "FLAT"],
+    settings_rh=["O", "Big +", "Small +", "Small -", "Big -", "F", "F-", "F+"],
+    settings_lh=["O", "Big +", "Small +", "Small -", "Big -", "F", "F-", "F+"],
     deltas_rh={
-        "STD":  HoselSettingDelta(0.0, 0.0, None, ""),
-        "+0.5": HoselSettingDelta(+0.5, None, None, "Lie varies; range-only"),
-        "+1.0": HoselSettingDelta(+1.0, None, None, "Lie varies; range-only"),
-        "+1.5": HoselSettingDelta(+1.5, None, None, "Lie varies; range-only"),
-        "-0.5": HoselSettingDelta(-0.5, None, None, "Lie varies; range-only"),
-        "-1.0": HoselSettingDelta(-1.0, None, None, "Lie varies; range-only"),
-        "-1.5": HoselSettingDelta(-1.5, None, None, "Lie varies; range-only"),
-        "FLAT": HoselSettingDelta(0.0, -3.0, None, "Up to 3° flatter than std (range-based)"),
+        # Baseline: O = stated loft, neutral lie
+        "O":       HoselSettingDelta(0.0,  0.0,  None, "Neutral"),
+
+        # Neutral lie zone (but lie is slightly flatter vs O per chart)
+        "Big +":   HoselSettingDelta(+1.5, -1.5, None, "Higher loft; lie flatter vs O"),
+        "Small +": HoselSettingDelta(+1.0, -1.0, None, "Higher loft; lie slightly flatter vs O"),
+        "Small -": HoselSettingDelta(-1.0, -1.0, None, "Lower loft; lie slightly flatter vs O"),
+        "Big -":   HoselSettingDelta(-1.5, -1.5, None, "Lower loft; lie flatter vs O"),
+
+        # Flat lie zone
+        "F":       HoselSettingDelta(0.0,  -3.0, None, "Flat setting (max flat)"),
+        "F-":      HoselSettingDelta(-1.0, -2.0, None, "Flat + lower loft"),
+        "F+":      HoselSettingDelta(+1.0, -2.0, None, "Flat + higher loft"),
     },
-    deltas_lh={},
+    deltas_lh={
+        # Keep the same deltas for LH in MVP. If you want later, we can add a LH-specific baseline.
+        "O":       HoselSettingDelta(0.0,  0.0,  None, "Neutral"),
+        "Big +":   HoselSettingDelta(+1.5, -1.5, None, "Higher loft; lie flatter vs O"),
+        "Small +": HoselSettingDelta(+1.0, -1.0, None, "Higher loft; lie slightly flatter vs O"),
+        "Small -": HoselSettingDelta(-1.0, -1.0, None, "Lower loft; lie slightly flatter vs O"),
+        "Big -":   HoselSettingDelta(-1.5, -1.5, None, "Lower loft; lie flatter vs O"),
+        "F":       HoselSettingDelta(0.0,  -3.0, None, "Flat setting (max flat)"),
+        "F-":      HoselSettingDelta(-1.0, -2.0, None, "Flat + lower loft"),
+        "F+":      HoselSettingDelta(+1.0, -2.0, None, "Flat + higher loft"),
+    },
     loft_range_deg=(-1.5, +1.5),
     lie_range_deg=(-3.0, 0.0),
-    notes="Ping labels differ slightly by gen; keep enums simple.",
+    face_range_deg=None,
+    notes="Exact loft/lie deltas encoded from an 8-setting TT2 chart. Flat options reduce lie substantially. :contentReference[oaicite:3]{index=3}"
 )
 
 # ---------------------------

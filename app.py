@@ -280,9 +280,16 @@ if len(detected_dr) > 0:
 else:
     st.caption("No driver detected/selected (DR).")
 
-# Fairways
-if len(detected_fw) > 0:
+# Fairways (safe: no slider if only 1 fairway)
+if len(detected_fw) == 0:
+    st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
 
+elif len(detected_fw) == 1:
+    st.subheader("Fairway Woods")
+    club_choice = detected_fw[0]
+    hosel_block(club_choice, f"Fairway: {club_choice}")
+
+else:
     st.subheader("Fairway Woods")
 
     max_fw = min(6, len(detected_fw))
@@ -306,46 +313,6 @@ if len(detected_fw) > 0:
             key=f"fw_slot_{i}__{'_'.join(detected_fw)}"
         )
         hosel_block(club_choice, f"Fairway: {club_choice}")
-
-else:
-
-    st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
-
-
-# Hybrids (safe: no slider if only 1 hybrid)
-if len(detected_hy) == 0:
-    st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
-
-elif len(detected_hy) == 1:
-    st.subheader("Hybrids")
-    club_choice = detected_hy[0]
-    hosel_block(club_choice, f"Hybrid: {club_choice}")
-
-else:
-    st.subheader("Hybrids")
-
-    max_hy = min(6, len(detected_hy))
-    default_hy = min(2, max_hy)
-
-    # Make the key change if the detected list changes (prevents stale state)
-    hy_slider_key = f"n_hy__{'_'.join(detected_hy)}"
-
-    n_hy = st.slider(
-        "How many hybrids to configure?",
-        min_value=1,
-        max_value=max_hy,
-        value=default_hy,
-        step=1,
-        key=hy_slider_key,
-    )
-
-    for i in range(n_hy):
-        club_choice = st.selectbox(
-            f"Hybrid slot {i+1}: which club?",
-            detected_hy,
-            key=f"hy_slot_{i}__{'_'.join(detected_hy)}"
-        )
-        hosel_block(club_choice, f"Hybrid: {club_choice}")
         
 # -----------------------------
 # Club-specific analysis

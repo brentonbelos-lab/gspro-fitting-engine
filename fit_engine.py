@@ -103,34 +103,35 @@ _CLUB_PATTERNS = [
     ("7H", [r"\b7H\b", r"\bH7\b", r"\b7\s*HY\b", r"\b7\s*HYBRID\b"]),
 ]
 
-def normalize_club_label(raw: object) -> str:
-    if raw is None or (isinstance(raw, float) and np.isnan(raw)):
-        return "OTHER"
-    s = str(raw).upper().strip()
-    if s in {"NAN", ""}:
+def normalize_club_label(label: str) -> str:
+    if not isinstance(label, str):
         return "OTHER"
 
-    # remove extra stuff like "TSR2 3W", "3W (tee)", etc.
-    s_clean = re.sub(r"[^A-Z0-9\s]", " ", s)
-    s_clean = re.sub(r"\s+", " ", s_clean).strip()
+    s = label.strip().upper()
 
-    for club, pats in _CLUB_PATTERNS:
-        for p in pats:
-            if re.search(p, s_clean):
-                return club
+    # Driver
+    if s == "DR":
+        return "DR"
 
-    # fallback: try to infer W/H with number
-    m = re.search(r"\b([2-9])\s*W\b", s_clean)
-    if m:
-        return f"{m.group(1)}W"
-    m = re.search(r"\b([2-9])\s*H\b", s_clean)
-    if m:
-        return f"{m.group(1)}H"
+    # Woods
+    if s.startswith("W") and len(s) == 2:
+        return f"{s[1]}W"
 
-    # fallback: recognize "H3" / "H 3" / "H-3"
-    m = re.search(r"\bH\s*([2-9])\b", s_clean)
-    if m:
-        return f"{m.group(1)}H"
+    # Hybrids
+    if s.startswith("H") and len(s) == 2:
+        return f"{s[1]}H"
+
+    # Irons
+    if s.startswith("I") and len(s) == 2:
+        return f"{s[1]}I"
+
+    # Wedges
+    if s in ["PW", "GW", "SW", "LW"]:
+        return s
+
+    # Putter
+    if s == "PT":
+        return "PT"
 
     return "OTHER"
 

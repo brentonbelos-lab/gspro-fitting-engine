@@ -23,6 +23,7 @@ class ClubAnalysis:
     summary: ClubSummary
     limiting_factors: List[str]
     recommendations: List[Dict[str, Any]]
+    what_to_change_first: Dict[str, Any]
 
 
 @dataclass
@@ -397,6 +398,78 @@ def recommend_for_club(summary: ClubSummary) -> List[Dict[str, Any]]:
 
     return recs
 
+def what_to_change_first(summary: ClubSummary) -> Dict[str, Any]:
+    """
+    Returns a single best next action (badge) based on the summary metrics.
+    """
+    m = summary.metrics
+    v = summary.variability
+
+    launch = m.get("launch", float("nan"))
+    spin = m.get("spin", float("nan"))
+    smash = m.get("smash", float("nan"))
+    offline_std = v.get("offline_std", float("nan"))
+
+    # Driver logic
+    if summary.club == "DR":
+        if np.isfinite(launch) and launch < 10.0:
+            return {
+                "badge": "Raise launch",
+                "why": "Launch is low; test +0.75° to +1.5° loft (adapter) before buying shafts/heads.",
+                "priority": 1,
+            }
+        if np.isfinite(spin) and spin > 3000:
+            return {
+                "badge": "Lower spin",
+                "why": "Spin is high; test a lower-spin shaft profile (tip-stiff / lower torque) and avoid adding dynamic loft.",
+                "priority": 2,
+            }
+        if np.isfinite(offline_std) and offline_std > 20:
+            return {
+                "badge": "Tighten dispersion",
+                "why": "Dispersion is wide; settings/face control and strike location will help more than chasing distance.",
+                "priority": 3,
+            }
+        if np.isfinite(smash) and smash < 1.42:
+            return {
+                "badge": "Improve strike (smash)",
+                "why": "Strike efficiency is low; test strike-friendly tee height + ball position and verify centered contact.",
+                "priority": 4,
+            }
+        return {
+            "badge": "Keep testing",
+            "why": "No major red flags. Use a simple A/B test: loft change → shaft profile → head category.",
+            "priority": 5,
+        }
+
+    # Hybrid logic
+    if summary.club == "HY":
+        if np.isfinite(offline_std) and offline_std > 15:
+            return {
+                "badge": "Tighten dispersion",
+                "why": "Hybrid dispersion is the main limiter. Test lie/face angle settings and shaft weight/length consistency.",
+                "priority": 1,
+            }
+        if np.isfinite(spin) and spin > 4500:
+            return {
+                "badge": "Lower spin slightly",
+                "why": "Hybrid spin is high; test a slightly lower-spin shaft profile or a more neutral head setting.",
+                "priority": 2,
+            }
+        return {
+            "badge": "Confirm gapping",
+            "why": "Make sure carry gap to your next club is consistent (goal: predictable yardage window).",
+            "priority": 3,
+        }
+
+    # Fairway wood (if/when present)
+    if summary.club == "3W":
+        if np.isfinite(offline_std) and offline_std > 18:
+            return {"badge": "Tighten dispersion", "why": "Start with strike + face control; then tune loft/shaft.", "priority": 1}
+        return {"badge": "Confirm launch window", "why": "Tune launch/spin for turf + tee use.", "priority": 2}
+
+    return {"badge": "Next best test", "why": "Collect more shots to increase confidence.", "priority": 9}
+
 
 def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
     df = _canonicalize_columns(df_raw)
@@ -427,6 +500,7 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
             summary=summary,
             limiting_factors=factors,
             recommendations=recs,
+            what_to_change_first=what_to_change_first(summary),
         )
 
     return SessionResult(club_results=club_results)
@@ -445,6 +519,7 @@ def session_to_dict(result: SessionResult) -> Dict[str, object]:
                 "metrics": analysis.summary.metrics,
                 "variability": analysis.summary.variability,
             },
+            "what_to_change_first": analysis.what_to_change_first,
             "limiting_factors": analysis.limiting_factors,
             "recommendations": analysis.recommendations,
         }

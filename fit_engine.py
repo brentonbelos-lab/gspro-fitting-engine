@@ -64,7 +64,49 @@ CANON_MAP = {
 
 def _canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df.columns = [c.strip() for c in df.columns]
+
+    # normalize headers aggressively
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.replace(" ", "_")
+        .str.replace("(", "")
+        .str.replace(")", "")
+        .str.replace("-", "_")
+        .str.lower()
+    )
+
+    rename_map = {
+        "club_name": "club",
+        "club": "club",
+
+        "club_speed_mph": "club_speed",
+        "ball_speed_mph": "ball_speed",
+
+        "carry_dist_yd": "carry",
+        "total_dist_yd": "total",
+
+        "offline_yd": "offline",
+        "peak_height_yd": "peak_height",
+
+        "desc_angle": "descent",
+
+        "hla": "hla",
+        "vla": "vla",
+
+        "back_spin": "spin",
+        "spin_axis": "spin_axis",
+
+        "club_aoa": "aoa",
+        "club_path": "path",
+
+        "face_to_path": "face_to_path",
+        "face_to_target": "face_to_target",
+    }
+
+    df = df.rename(columns=rename_map)
+
+    return df
     rename = {src: dst for src, dst in CANON_MAP.items() if src in df.columns}
     df = df.rename(columns=rename)
 

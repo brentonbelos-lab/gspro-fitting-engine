@@ -441,7 +441,7 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         "spin", "spin_axis", "side_spin",
         "aoa", "path", "face_to_path", "face_to_target",
     ]
-    for col in numeric_cols:
+for col in numeric_cols:
     if col in df.columns:
         df[col] = (
             df[col]

@@ -4,9 +4,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Dict, List
 
+import numpy as np
 import pandas as pd
 import streamlit as st
-import numpy as np
 
 from hosel_db import (
     get_supported_brands,
@@ -19,8 +19,6 @@ from hosel_db import (
 from fit_engine import (
     canonicalize,
     summarize_by_club,
-    normalize_club_label,
-    club_family,
     targets_for_club,
     estimate_launch_spin_change,
     miss_tendency,
@@ -28,11 +26,63 @@ from fit_engine import (
     pick_one_hosel_setting,
 )
 
+# -----------------------------
+# Dependent-dropdown reset helpers (brand -> system -> settings)
+# -----------------------------
+def _reset_system_and_settings_for_club(club_id: str):
+    """When brand changes: reset hosel system + current/proposed setting to valid first options."""
+    brand_key = f"{club_id}_brand"
+    sys_key = f"{club_id}_sys"
+    cur_key = f"{club_id}_cur"
+    new_key = f"{club_id}_new"
+    hand_key = f"{club_id}_hand"
 
+    brand = st.session_state.get(brand_key, None)
+    handedness = st.session_state.get(hand_key, "RH")
+
+    systems = get_brand_systems(brand) if brand else []
+    system_names = [s.system_name for s in systems]
+
+    if not system_names:
+        st.session_state[sys_key] = "(no systems found)"
+        st.session_state[cur_key] = "STD"
+        st.session_state[new_key] = "STD"
+        return
+
+    # reset system to first valid
+    st.session_state[sys_key] = system_names[0]
+
+    # reset settings to first valid for (brand, system, hand)
+    settings = list_settings(brand, st.session_state[sys_key], handedness)
+    first_setting = settings[0] if settings else "STD"
+    st.session_state[cur_key] = first_setting
+    st.session_state[new_key] = first_setting
+
+
+def _reset_settings_for_club(club_id: str):
+    """When system OR handedness changes: reset current/proposed to first valid option."""
+    brand_key = f"{club_id}_brand"
+    sys_key = f"{club_id}_sys"
+    cur_key = f"{club_id}_cur"
+    new_key = f"{club_id}_new"
+    hand_key = f"{club_id}_hand"
+
+    brand = st.session_state.get(brand_key, None)
+    system_name = st.session_state.get(sys_key, None)
+    handedness = st.session_state.get(hand_key, "RH")
+
+    settings = list_settings(brand, system_name, handedness) if (brand and system_name) else []
+    first_setting = settings[0] if settings else "STD"
+    st.session_state[cur_key] = first_setting
+    st.session_state[new_key] = first_setting
+
+
+# -----------------------------
+# Streamlit config
+# -----------------------------
 st.set_page_config(page_title="FitCaddie — Spec-Range MVP", layout="wide")
 st.title("FitCaddie — Spec-Range MVP")
 st.caption("Upload a GSPro CSV export → club-specific analysis (DR/3W/5W/3H/etc.) → hosel guidance.")
-
 
 # -----------------------------
 # Sidebar
@@ -54,6 +104,7 @@ with st.sidebar:
 
     st.divider()
     st.header("Filters")
+    # min=10, max=50, default=10
     min_shots = st.slider("Min shots per Club", 10, 50, 10, 1)
 
     st.divider()
@@ -63,7 +114,6 @@ with st.sidebar:
 if not uploaded:
     st.info("Upload a GSPro CSV to begin.")
     st.stop()
-
 
 # -----------------------------
 # Load + canonicalize
@@ -82,9 +132,8 @@ if show_raw:
         st.subheader("Canonicalized (first 200)")
         st.dataframe(canon_df.head(200), use_container_width=True)
 
-
 # -----------------------------
-# Club-specific detection (NEW)
+# Club-specific detection
 # -----------------------------
 club_counts = canon_df["club_id"].value_counts().to_dict()
 club_ids_all = [c for c in club_counts.keys() if c != "OTHER"]
@@ -110,43 +159,85 @@ if not selected_clubs:
 
 canon_df = canon_df[canon_df["club_id"].isin(selected_clubs)].copy()
 
-
 # -----------------------------
-# Hosel Setup UI (club-specific mapping)
+# Hosel Setup UI
 # -----------------------------
 st.divider()
 st.header("Hosel Setup (Driver / Fairways / Hybrids)")
-st.caption("Configure hosel settings by actual club (3W/5W/3H/etc.). FitCaddie will estimate launch/spin deltas and recommend ONE setting when possible.")
+st.caption("Configure hosel settings by actual club (3W/5W/3H/etc.). Changing brand resets system + settings automatically.")
 
-# Build lists of detected fairways/hybrids for assignment dropdowns
 detected_fw = [c for c in selected_clubs if c.endswith("W")]
 detected_hy = [c for c in selected_clubs if c.endswith("H")]
 detected_dr = [c for c in selected_clubs if c == "DR"]
 
-hosel_configs: Dict[str, Dict] = {}  # club_id -> config dict
+hosel_configs: Dict[str, Dict] = {}
+
 
 def hosel_block(club_id: str, title: str):
     st.subheader(title)
 
-    c1, c2, c3, c4 = st.columns([1.1, 1.4, 0.9, 1.6])
+    c1, c2, c3, c4 = st.columns([1.1, 1.4, 1.2, 1.4])
+
     with c1:
-        handedness = st.selectbox(f"{club_id} Hand", ["RH", "LH"], index=0, key=f"{club_id}_hand")
+        handedness = st.selectbox(
+            f"{club_id} Hand",
+            ["RH", "LH"],
+            index=0,
+            key=f"{club_id}_hand",
+            on_change=_reset_settings_for_club,
+            args=(club_id,),
+        )
+
     with c2:
-        brand = st.selectbox(f"{club_id} Brand", get_supported_brands(), index=0, key=f"{club_id}_brand")
+        brand = st.selectbox(
+            f"{club_id} Brand",
+            get_supported_brands(),
+            index=0,
+            key=f"{club_id}_brand",
+            on_change=_reset_system_and_settings_for_club,
+            args=(club_id,),
+        )
+
     systems = get_brand_systems(brand)
     system_names = [s.system_name for s in systems] if systems else ["(no systems found)"]
+
     with c3:
-        system_name = st.selectbox(f"{club_id} Hosel System", system_names, index=0, key=f"{club_id}_sys")
+        system_name = st.selectbox(
+            f"{club_id} Hosel System",
+            system_names,
+            index=0,
+            key=f"{club_id}_sys",
+            on_change=_reset_settings_for_club,
+            args=(club_id,),
+        )
+
     with c4:
-        stated_loft = st.number_input(f"{club_id} Stated Loft (°)", min_value=0.0, max_value=30.0, value=0.0, step=0.5, key=f"{club_id}_loft")
+        stated_loft = st.number_input(
+            f"{club_id} Stated Loft (°)",
+            min_value=0.0,
+            max_value=30.0,
+            value=0.0,
+            step=0.5,
+            key=f"{club_id}_loft",
+        )
 
     settings = list_settings(brand, system_name, handedness)
+
     s1, s2 = st.columns(2)
     with s1:
-        current_setting = st.selectbox(f"{club_id} Current Setting", settings if settings else ["STD"], key=f"{club_id}_cur")
+        current_setting = st.selectbox(
+            f"{club_id} Current Setting",
+            settings if settings else ["STD"],
+            key=f"{club_id}_cur",
+        )
     with s2:
-        proposed_setting = st.selectbox(f"{club_id} Proposed Setting", settings if settings else ["STD"], key=f"{club_id}_new")
+        proposed_setting = st.selectbox(
+            f"{club_id} Proposed Setting",
+            settings if settings else ["STD"],
+            key=f"{club_id}_new",
+        )
 
+    # Estimate deltas for proposed change when exact deltas exist
     cur_delta = translate_setting(brand, system_name, current_setting, handedness)
     new_delta = translate_setting(brand, system_name, proposed_setting, handedness)
 
@@ -184,36 +275,48 @@ def hosel_block(club_id: str, title: str):
 
 
 # Driver
-if detected_dr:
+if len(detected_dr) > 0:
     hosel_block("DR", "Driver")
+else:
+    st.caption("No driver detected/selected (DR).")
 
-# Fairways (you can configure multiple)
-if detected_fw:
+# Fairways (bulletproof slider)
+if len(detected_fw) > 0:
     st.subheader("Fairway Woods")
-    n_fw = st.slider("How many fairway woods to configure?", 1, min(6, len(detected_fw)), min(2, len(detected_fw)), 1)
+    max_fw = min(6, len(detected_fw))
+    default_fw = min(2, max_fw)
+    n_fw = st.slider("How many fairway woods to configure?", 1, max_fw, default_fw, 1)
     for i in range(n_fw):
         club_choice = st.selectbox(f"Fairway slot {i+1}: which club?", detected_fw, key=f"fw_slot_{i}")
         hosel_block(club_choice, f"Fairway: {club_choice}")
+else:
+    st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
 
-# Hybrids
-if detected_hy:
+# Hybrids (bulletproof slider)
+if len(detected_hy) > 0:
     st.subheader("Hybrids")
-    n_hy = st.slider("How many hybrids to configure?", 1, min(6, len(detected_hy)), min(2, len(detected_hy)), 1)
+    max_hy = min(6, len(detected_hy))
+    default_hy = min(2, max_hy)
+    n_hy = st.slider("How many hybrids to configure?", 1, max_hy, default_hy, 1)
     for i in range(n_hy):
         club_choice = st.selectbox(f"Hybrid slot {i+1}: which club?", detected_hy, key=f"hy_slot_{i}")
         hosel_block(club_choice, f"Hybrid: {club_choice}")
-
+else:
+    st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
 
 # -----------------------------
-# Club-specific analysis (NEW)
+# Club-specific analysis
 # -----------------------------
 st.divider()
 st.header("Club-Specific Analysis & Recommendations")
 
 summaries = summarize_by_club(canon_df)
 
-# Sort clubs in a sensible order
-order = {"DR": 0, "2W": 1, "3W": 2, "4W": 3, "5W": 4, "7W": 5, "9W": 6, "2H": 10, "3H": 11, "4H": 12, "5H": 13, "6H": 14, "7H": 15}
+order = {
+    "DR": 0,
+    "2W": 1, "3W": 2, "4W": 3, "5W": 4, "7W": 5, "9W": 6,
+    "2H": 10, "3H": 11, "4H": 12, "5H": 13, "6H": 14, "7H": 15
+}
 club_list_sorted = sorted(summaries.keys(), key=lambda c: order.get(c, 99))
 
 for club_id in club_list_sorted:
@@ -225,16 +328,48 @@ for club_id in club_list_sorted:
 
     # Metrics
     mcols = st.columns(4)
-    mcols[0].metric("Club Speed (mph)", "—" if np.isnan(s.club_speed_avg) else f"{s.club_speed_avg:.1f}", None if np.isnan(s.club_speed_std) else f"±{s.club_speed_std:.1f}")
-    mcols[1].metric("Ball Speed (mph)", "—" if np.isnan(s.ball_speed_avg) else f"{s.ball_speed_avg:.1f}", None if np.isnan(s.ball_speed_std) else f"±{s.ball_speed_std:.1f}")
-    mcols[2].metric("Smash", "—" if np.isnan(s.smash_avg) else f"{s.smash_avg:.2f}", None if np.isnan(s.smash_std) else f"±{s.smash_std:.2f}")
-    mcols[3].metric("Carry (yd)", "—" if np.isnan(s.carry_avg) else f"{s.carry_avg:.1f}", None if np.isnan(s.carry_std) else f"±{s.carry_std:.1f}")
+    mcols[0].metric(
+        "Club Speed (mph)",
+        "—" if np.isnan(s.club_speed_avg) else f"{s.club_speed_avg:.1f}",
+        None if np.isnan(s.club_speed_std) else f"±{s.club_speed_std:.1f}",
+    )
+    mcols[1].metric(
+        "Ball Speed (mph)",
+        "—" if np.isnan(s.ball_speed_avg) else f"{s.ball_speed_avg:.1f}",
+        None if np.isnan(s.ball_speed_std) else f"±{s.ball_speed_std:.1f}",
+    )
+    mcols[2].metric(
+        "Smash",
+        "—" if np.isnan(s.smash_avg) else f"{s.smash_avg:.2f}",
+        None if np.isnan(s.smash_std) else f"±{s.smash_std:.2f}",
+    )
+    mcols[3].metric(
+        "Carry (yd)",
+        "—" if np.isnan(s.carry_avg) else f"{s.carry_avg:.1f}",
+        None if np.isnan(s.carry_std) else f"±{s.carry_std:.1f}",
+    )
 
     mcols2 = st.columns(4)
-    mcols2[0].metric("Offline (yd)", "—" if np.isnan(s.offline_avg) else f"{s.offline_avg:.1f}", None if np.isnan(s.offline_std) else f"±{s.offline_std:.1f}")
-    mcols2[1].metric("Launch / VLA (°)", "—" if np.isnan(s.vla_avg) else f"{s.vla_avg:.1f}", None if np.isnan(s.vla_std) else f"±{s.vla_std:.1f}")
-    mcols2[2].metric("Backspin (rpm)", "—" if np.isnan(s.spin_avg) else f"{s.spin_avg:.0f}", None if np.isnan(s.spin_std) else f"±{s.spin_std:.0f}")
-    mcols2[3].metric("AoA (°)", "—" if np.isnan(s.aoa_avg) else f"{s.aoa_avg:.1f}", None if np.isnan(s.aoa_std) else f"±{s.aoa_std:.1f}")
+    mcols2[0].metric(
+        "Offline (yd)",
+        "—" if np.isnan(s.offline_avg) else f"{s.offline_avg:.1f}",
+        None if np.isnan(s.offline_std) else f"±{s.offline_std:.1f}",
+    )
+    mcols2[1].metric(
+        "Launch / VLA (°)",
+        "—" if np.isnan(s.vla_avg) else f"{s.vla_avg:.1f}",
+        None if np.isnan(s.vla_std) else f"±{s.vla_std:.1f}",
+    )
+    mcols2[2].metric(
+        "Backspin (rpm)",
+        "—" if np.isnan(s.spin_avg) else f"{s.spin_avg:.0f}",
+        None if np.isnan(s.spin_std) else f"±{s.spin_std:.0f}",
+    )
+    mcols2[3].metric(
+        "AoA (°)",
+        "—" if np.isnan(s.aoa_avg) else f"{s.aoa_avg:.1f}",
+        None if np.isnan(s.aoa_std) else f"±{s.aoa_std:.1f}",
+    )
 
     # Limiting factors
     st.markdown("### Limiting Factors")
@@ -248,7 +383,6 @@ for club_id in club_list_sorted:
         if smash_msg:
             lim.append(smash_msg)
 
-    # target checks
     t = targets_for_club(club_id, s.club_speed_avg)
     launch_lo, launch_hi = t["launch"]
     spin_lo, spin_hi = t["spin"]
@@ -261,11 +395,10 @@ for club_id in club_list_sorted:
     for item in lim:
         st.write("•", item)
 
-    # Recommendations (includes ONE hosel recommendation if configured)
+    # Recommendations
     st.markdown("### Recommendations")
     recos: List[str] = []
 
-    # If hosel configured for this club, attempt ONE setting recommendation
     if club_id in hosel_configs:
         h = hosel_configs[club_id]
         brand = h["brand"]
@@ -273,14 +406,10 @@ for club_id in club_list_sorted:
         handedness = h["handedness"]
         current_setting = h["current_setting"]
 
-        # Priorities:
-        # 1) launch window
-        # 2) miss tendency (lie)
-        # 3) spin safety
         needed_loft = 0.0
         needed_lie = 0.0
 
-        # 1) launch window (use VLA target)
+        # 1) launch window (use VLA)
         if not np.isnan(s.vla_avg):
             launch_per_static_loft = 0.85 * k_loft_to_dynamic
             if s.vla_avg < launch_lo:
@@ -288,13 +417,13 @@ for club_id in club_list_sorted:
             elif s.vla_avg > launch_hi:
                 needed_loft = max(-2.0, -(s.vla_avg - launch_hi) / max(0.05, launch_per_static_loft))
 
-        # 2) miss (lie)
+        # 2) miss -> lie
         if miss == "Right miss tendency":
             needed_lie = +0.75
         elif miss == "Left miss tendency":
             needed_lie = -0.75
 
-        # 3) spin safety (nudge loft)
+        # 3) spin safety -> nudge loft
         if not np.isnan(s.spin_avg):
             if s.spin_avg < spin_lo:
                 needed_loft = max(needed_loft, +0.75)
@@ -328,7 +457,6 @@ for club_id in club_list_sorted:
     else:
         recos.append("Hosel: configure this club in the Hosel Setup section to enable setting recommendations.")
 
-    # Generic recos
     if miss == "Right miss tendency":
         recos.append("Directional: right bias → try more upright / draw setting before changing shafts.")
     elif miss == "Left miss tendency":
@@ -339,11 +467,16 @@ for club_id in club_list_sorted:
 
     with st.expander(f"Show shot rows for {club_id}"):
         show_cols = [
-            "club_raw","club_id","club_speed_mph","ball_speed_mph","smash",
-            "carry_yd","total_yd","offline_yd","vla_deg","backspin_rpm","aoa_deg",
-            "club_path_deg","face_to_path_deg","face_to_target_deg",
+            "club_raw", "club_id",
+            "club_speed_mph", "ball_speed_mph", "smash",
+            "carry_yd", "total_yd", "offline_yd",
+            "vla_deg", "backspin_rpm", "aoa_deg",
+            "club_path_deg", "face_to_path_deg", "face_to_target_deg",
         ]
-        st.dataframe(canon_df[canon_df["club_id"] == club_id][show_cols].reset_index(drop=True), use_container_width=True)
+        st.dataframe(
+            canon_df[canon_df["club_id"] == club_id][show_cols].reset_index(drop=True),
+            use_container_width=True
+        )
 
 st.divider()
 st.caption("Next upgrade after this: dispersion charts + face-to-path pattern classification (push-slice vs pull-hook).")

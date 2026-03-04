@@ -442,8 +442,16 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         "aoa", "path", "face_to_path", "face_to_target",
     ]
     for col in numeric_cols:
-        if col in df.columns:
-            df[col] = _to_numeric_safe(df[col])
+    if col in df.columns:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace("yds", "", regex=False)
+            .str.replace("yd", "", regex=False)
+            .str.replace(",", "", regex=False)
+            .str.strip()
+        )
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     if "club" not in df.columns:
         raise ValueError("CSV missing club column (could not find Club/Club Name).")

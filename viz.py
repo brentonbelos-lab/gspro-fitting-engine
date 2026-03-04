@@ -108,6 +108,11 @@ def render_dispersion(
 
     plot_df = df.copy()
     plot_df = plot_df[np.isfinite(plot_df[dist_col].astype(float)) & np.isfinite(plot_df["offline_yd"].astype(float))].copy()
+    # Dynamic y-limits so the fairway/rough bands fit the visible chart
+    y_vals = plot_df["offline_yd"].astype(float).to_numpy()
+    y_abs_max = float(np.nanmax(np.abs(y_vals))) if len(y_vals) else 50.0
+    y_pad = 15.0
+    y_lim = max(40.0, y_abs_max + y_pad)   # minimum view window so it doesn't feel cramped
     if len(plot_df) == 0:
         st.info("No valid shots to plot after filtering missing values.")
         return
@@ -140,16 +145,16 @@ def render_dispersion(
         layer="below",
     )
     
-    # Rough (top and bottom bands)
+    # Rough (fill remaining visible area)
     fig.add_hrect(
         y0=half_fw,
-        y1=half_fw + 120,
+        y1=y_lim,
         fillcolor="rgba(160,160,160,0.14)",
         line_width=0,
         layer="below",
     )
     fig.add_hrect(
-        y0=-half_fw - 120,
+        y0=-y_lim,
         y1=-half_fw,
         fillcolor="rgba(160,160,160,0.14)",
         line_width=0,
@@ -233,7 +238,8 @@ def render_dispersion(
     fig.update_yaxes(
         showgrid=True,
         zeroline=False,
-        autorange="reversed"
+        autorange=False,
+        range=[y_lim, -y_lim],  # reversed: top is +, bottom is -
     )
 
     # Render chart

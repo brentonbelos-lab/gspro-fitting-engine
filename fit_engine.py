@@ -506,6 +506,152 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
     return SessionResult(club_results=club_results)
 
 
+# =========================
+# Titleist SureFit (Driver/FW) setting recommender
+# =========================
+
+SUREFIT_RH = {
+    # loft_delta, lie_delta (upright positive)
+    "A3": (+1.5, +1.5), "B3": (+1.5, +0.75), "A4": (+1.5, 0.0),  "B4": (+1.5, -0.75),
+    "D3": (+0.75, +1.5), "C3": (+0.75, +0.75), "D4": (+0.75, 0.0), "C4": (+0.75, -0.75),
+    "A2": (0.0, +1.5),  "B2": (0.0, +0.75),  "A1": (0.0, 0.0),  "B1": (0.0, -0.75),
+    "D2": (-0.75, +1.5), "C2": (-0.75, +0.75), "D1": (-0.75, 0.0), "C1": (-0.75, -0.75),
+}
+
+SUREFIT_LH = {
+    # loft_delta, lie_delta (upright positive)
+    "C1": (+1.5, -0.75), "D1": (+1.5, 0.0),  "C2": (+1.5, +0.75), "D2": (+1.5, +1.5),
+    "B1": (+0.75, -0.75), "A1": (+0.75, 0.0), "B2": (+0.75, +0.75), "A2": (+0.75, +1.5),
+    "C4": (0.0, -0.75),  "D4": (0.0, 0.0),  "C3": (0.0, +0.75),  "D3": (0.0, +1.5),
+    "B4": (-0.75, -0.75), "A4": (-0.75, 0.0), "B3": (-0.75, +0.75), "A3": (-0.75, +1.5),
+}
+
+def recommend_titleist_surefit_driver(
+    summary: "ClubSummary",
+    handedness: str,
+    current_setting: str,
+    miss_tendency: str,
+) -> dict:
+    """
+    Strong, specific SureFit recommendation for Driver/FW:
+    - Uses user's miss tendency (B) as primary for direction.
+    - Uses launch/spin from summary to decide loft change.
+    Returns dict with from/to + expected effect.
+    """
+    handedness = (handedness or "RH").upper().strip()
+    current_setting = (current_setting or "").upper().strip()
+    miss_tendency = (miss_tendency or "NOT SURE").upper().strip()
+
+    table = SUREFIT_LH if handedness == "LH" else SUREFIT_RH
+
+    if current_setting not in table:
+        return {
+            "action": "unknown_current_setting",
+            "from": current_setting,
+            "to": None,
+            "why": "Current SureFit setting not recognized.",
+            "expected": {},
+        }
+
+    launch = summary.metrics.get("launch", float("nan"))
+    spin = summary.metrics.get("spin", float("nan"))
+
+    # ---- Decide loft target from data ----
+    # (simple + safe thresholds; you can tune later)
+    loft_need = 0.0
+    if np.isfinite(launch) and launch < 10.0:
+        loft_need = +0.75
+        if np.isfinite(launch) and launch < 9.0:
+            loft_need = +1.5
+    elif np.isfinite(launch) and launch > 14.5:
+        loft_need = -0.75
+
+    # ---- Decide direction target from user miss tendency ----
+    # We interpret:
+    # - miss RIGHT => add draw bias => more upright
+    # - miss LEFT  => add fade bias => flatter
+    lie_need = 0.0
+    if miss_tendency == "RIGHT":
+        lie_need = +0.75
+        # if also high dispersion, nudge stronger
+        if summary.variability.get("offline_std", 0) and summary.variability["offline_std"] > 20:
+            lie_need = +1.5
+    elif miss_tendency == "LEFT":
+        lie_need = -0.75
+    else:
+        lie_need = 0.0  # BOTH / NOT SURE
+
+    # ---- Build target deltas relative to current ----
+    curr_loft, curr_lie = table[current_setting]
+    target_loft = curr_loft + loft_need
+    target_lie = curr_lie + lie_need
+
+    # clamp to available
+    def _clamp(x, lo, hi):
+        return max(lo, min(hi, x))
+
+    target_loft = _clamp(target_loft, -0.75, +1.5)
+    target_lie = _clamp(target_lie, -0.75, +1.5)
+
+    # ---- Choose closest setting in this handedness table ----
+    best = None
+    best_dist = 1e9
+    for setting, (ld, lied) in table.items():
+        dist = (ld - target_loft) ** 2 + (lied - target_lie) ** 2
+        if dist < best_dist:
+            best_dist = dist
+            best = setting
+
+    if best == current_setting:
+        return {
+            "action": "no_change",
+            "from": current_setting,
+            "to": best,
+            "why": "Your current setting is already close to the best match for your miss tendency and launch window.",
+            "expected": {"launch_deg": "≈0", "start_line": "≈0"},
+        }
+
+    # ---- Build explanation ----
+    best_loft, best_lie = table[best]
+    d_loft = best_loft - curr_loft
+    d_lie = best_lie - curr_lie
+
+    expected = {}
+    if d_loft > 0:
+        expected["launch_deg"] = f"+{d_loft:.2f} (square-face effective)"
+        expected["note"] = "Higher loft can add launch and may add spin—confirm spin doesn’t balloon."
+    elif d_loft < 0:
+        expected["launch_deg"] = f"{d_loft:.2f} (square-face effective)"
+        expected["note"] = "Lower loft can reduce launch/spin—confirm you don’t lose carry."
+
+    if d_lie > 0:
+        expected["direction_bias"] = "More draw bias (more upright)"
+    elif d_lie < 0:
+        expected["direction_bias"] = "More fade bias (flatter)"
+
+    # extra spin caution
+    if np.isfinite(spin) and spin > 3200 and d_loft > 0:
+        expected["spin_watchout"] = "Spin already high—if spin rises further, switch to lower-spin shaft profile instead of more loft."
+
+    why_parts = []
+    if loft_need > 0:
+        why_parts.append("Launch is low → add loft")
+    if loft_need < 0:
+        why_parts.append("Launch is high → reduce loft")
+    if miss_tendency == "RIGHT":
+        why_parts.append("Miss is right → add draw bias (upright lie)")
+    if miss_tendency == "LEFT":
+        why_parts.append("Miss is left → add fade bias (flatter lie)")
+
+    return {
+        "action": "change_setting",
+        "from": current_setting,
+        "to": best,
+        "why": "; ".join(why_parts) if why_parts else "Tune loft/lie toward your target window.",
+        "expected": expected,
+    }
+
+
 def session_to_dict(result: SessionResult) -> Dict[str, object]:
     out: Dict[str, object] = {"clubs": {}}
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Dict, List
+from viz import render_dispersion
 
 import numpy as np
 import pandas as pd
@@ -158,6 +159,10 @@ if not selected_clubs:
     st.stop()
 
 canon_df = canon_df[canon_df["club_id"].isin(selected_clubs)].copy()
+
+st.divider()
+st.header("Shot Dispersion Map")
+render_dispersion(canon_df)
 
 # -----------------------------
 # Hosel Setup UI

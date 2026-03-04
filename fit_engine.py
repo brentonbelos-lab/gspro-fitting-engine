@@ -483,3 +483,32 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         )
 
     return SessionResult(club_results=club_results)
+def session_to_dict(result: SessionResult) -> Dict[str, object]:
+    """
+    Convert dataclasses to JSON-serializable dict for Streamlit.
+    (Minimal version — won’t crash your app.)
+    """
+    out: Dict[str, object] = {"clubs": {}}
+    for club, analysis in result.club_results.items():
+        out["clubs"][club] = {
+            "summary": {
+                "club": analysis.summary.club,
+                "n_total": analysis.summary.n_total,
+                "n_used": analysis.summary.n_used,
+                "confidence": analysis.summary.confidence,
+                "metrics": analysis.summary.metrics,
+                "variability": analysis.summary.variability,
+            },
+            "limiting_factors": analysis.limiting_factors,
+            "recommendations": [
+                {
+                    "priority": r.priority,
+                    "title": r.title,
+                    "rationale": r.rationale,
+                    "confidence": r.confidence,
+                    "spec": r.spec,
+                }
+                for r in analysis.recommendations
+            ],
+        }
+    return out

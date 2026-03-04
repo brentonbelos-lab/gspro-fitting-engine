@@ -312,15 +312,22 @@ else:
     st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
 
 
-# Hybrids
-if len(detected_hy) > 0:
+# Hybrids (safe: no slider if only 1 hybrid)
+if len(detected_hy) == 0:
+    st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
 
+elif len(detected_hy) == 1:
+    st.subheader("Hybrids")
+    club_choice = detected_hy[0]
+    hosel_block(club_choice, f"Hybrid: {club_choice}")
+
+else:
     st.subheader("Hybrids")
 
     max_hy = min(6, len(detected_hy))
     default_hy = min(2, max_hy)
 
-    # Key changes if the detected_hy list changes -> prevents stale slider state crashes
+    # Make the key change if the detected list changes (prevents stale state)
     hy_slider_key = f"n_hy__{'_'.join(detected_hy)}"
 
     n_hy = st.slider(
@@ -339,11 +346,7 @@ if len(detected_hy) > 0:
             key=f"hy_slot_{i}__{'_'.join(detected_hy)}"
         )
         hosel_block(club_choice, f"Hybrid: {club_choice}")
-
-else:
-
-    st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
-    
+        
 # -----------------------------
 # Club-specific analysis
 # -----------------------------

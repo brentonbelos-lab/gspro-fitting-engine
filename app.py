@@ -4,6 +4,7 @@
 
 import streamlit as st
 import pandas as pd
+from hosel_db import get_supported_brands, get_brand_systems, list_settings, translate_setting
 
 from fit_engine import (
     load_gspro_csv,
@@ -29,6 +30,41 @@ uploaded_file = st.file_uploader(
     "Upload GSPro CSV export",
     type=["csv"]
 )
+
+st.subheader("Driver Setup")
+
+brand = st.selectbox(
+    "Driver Brand",
+    get_supported_brands()
+)
+
+systems = get_brand_systems(brand)
+
+system_name = st.selectbox(
+    "Hosel System",
+    [s.system_name for s in systems]
+)
+
+handedness = st.selectbox(
+    "Handedness",
+    ["RH", "LH"]
+)
+
+settings = list_settings(brand, system_name, handedness)
+
+setting = st.selectbox(
+    "Hosel Setting",
+    settings
+)
+
+delta = translate_setting(
+    brand,
+    system_name,
+    setting,
+    handedness
+)
+
+st.write("Hosel Adjustment Translation:", delta)
 
 if uploaded_file is None:
     st.info("Upload a GSPro CSV to begin analysis.")

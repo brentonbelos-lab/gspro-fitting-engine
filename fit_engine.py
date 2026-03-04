@@ -556,14 +556,42 @@ def recommend_titleist_surefit_driver(
     launch = summary.metrics.get("launch", float("nan"))
     spin = summary.metrics.get("spin", float("nan"))
 
-    # ---- Decide loft target from data ----
-    # (simple + safe thresholds; you can tune later)
+    # ---- Decide loft target using swing-speed launch windows ----
+    
+    club_speed = summary.metrics.get("club_speed", float("nan"))
+    launch = summary.metrics.get("launch", float("nan"))
+    
+    # Default launch window
+    target_low = 12.0
+    target_high = 15.0
+    
+    # Adjust window based on swing speed
+    if np.isfinite(club_speed):
+    
+        if club_speed < 90:
+            target_low = 14.0
+            target_high = 19.0
+    
+        elif 90 <= club_speed <= 105:
+            target_low = 12.0
+            target_high = 15.0
+    
+        else:  # faster swing speeds
+            target_low = 10.0
+            target_high = 14.0
+    
+    
     loft_need = 0.0
-    if np.isfinite(launch) and launch < 10.0:
+    
+    if np.isfinite(launch):
+
+    if launch < (target_low - 1.0):
         loft_need = +0.75
-        if np.isfinite(launch) and launch < 9.0:
+
+        if launch < (target_low - 2.0):
             loft_need = +1.5
-    elif np.isfinite(launch) and launch > 14.5:
+
+    elif launch > (target_high + 1.0):
         loft_need = -0.75
 
     # ---- Decide direction target from user miss tendency ----

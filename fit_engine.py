@@ -234,22 +234,30 @@ def summarize_club(df_used: pd.DataFrame, bucket: str, n_total: int) -> ClubSumm
         s = pd.to_numeric(df_used[col], errors="coerce")
         return float(s.std(skipna=True))
 
-    metrics = {
+        # --- HARD PARSE (guaranteed numeric) for key fields ---
+    offline_num = (
+        _to_numeric_lr(df_used["offline"]) if "offline" in df_used.columns else pd.Series(dtype=float)
+    )
+    vla_num = (
+        _to_numeric_lr(df_used["vla"]) if "vla" in df_used.columns else pd.Series(dtype=float)
+    )
+
+    offline_mean_val = float(offline_num.mean(skipna=True)) if len(offline_num) else float("nan")
+    launch_mean_val = float(vla_num.mean(skipna=True)) if len(vla_num) else float("nan")
+    
+        metrics = {
         "carry": mean("carry"),
         "total": mean("total"),
 
-        # offline
-        "offline_mean": mean("offline"),
-        "offline_abs_mean": float(pd.to_numeric(df_used["offline"], errors="coerce").abs().mean(skipna=True))
-            if "offline" in df_used.columns else float("nan"),
+        "offline_mean": offline_mean_val,
+        "offline_abs_mean": float(offline_num.abs().mean(skipna=True)) if len(offline_num) else float("nan"),
 
         "ball_speed": mean("ball_speed"),
         "club_speed": mean("club_speed"),
         "smash": mean("smash") if "smash" in df_used.columns else _safe_smash(df_used),
 
-        # launch (store both names so UI always finds it)
-        "launch_vla": mean("vla"),
-        "launch": mean("vla"),
+        "launch_vla": launch_mean_val,
+        "launch": launch_mean_val,
 
         "spin": mean("spin"),
         "spin_axis": mean("spin_axis"),

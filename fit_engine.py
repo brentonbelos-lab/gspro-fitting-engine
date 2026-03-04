@@ -419,20 +419,21 @@ def recommend_for_club(summary: ClubSummary) -> List[Recommendation]:
 
     return recs
 
-
 def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
     df = _canonicalize_columns(df_raw.copy())
 
-    # Clean DistanceToPin like "181.28 yds" -> 181.28 (optional field)
+    # Optional: clean DistanceToPin like "181.28 yds" -> 181.28
     if "DistanceToPin" in df.columns:
         df["DistanceToPin"] = (
             df["DistanceToPin"].astype(str)
             .str.replace("yds", "", regex=False)
             .str.replace("yd", "", regex=False)
+            .str.replace(",", "", regex=False)
             .str.strip()
         )
         df["DistanceToPin"] = pd.to_numeric(df["DistanceToPin"], errors="coerce")
 
+    # Make sure numeric columns are numeric at the session level
     numeric_cols = [
         "carry", "total", "offline",
         "ball_speed", "club_speed", "smash",
@@ -440,12 +441,10 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
         "spin", "spin_axis", "side_spin",
         "aoa", "path", "face_to_path", "face_to_target",
     ]
-
     for col in numeric_cols:
         if col in df.columns:
             df[col] = (
-                df[col]
-                .astype(str)
+                df[col].astype(str)
                 .str.replace("yds", "", regex=False)
                 .str.replace("yd", "", regex=False)
                 .str.replace(",", "", regex=False)
@@ -460,47 +459,46 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
 
     club_results: Dict[str, ClubAnalysis] = {}
 
-   for club_raw, df_club in df.groupby("club", dropna=False):
+    for club_raw, df_club in df.groupby("club", dropna=False):
+        bucket = _club_bucket(club_raw)
 
-    bucket = _club_bucket(club_raw)
-    if bucket not in {"DR", "3W", "HY"}:
-        continue
+        # v1 supports only DR, 3W, HY
+        if bucket not in {"DR", "3W", "HY"}:
+            continue
 
-    n_total = len(df_club)
-    outliers = flag_outliers_per_club(df_club, bucket)
-    df_used = df_club.loc[~outliers].copy()
+        n_total = len(df_club)
 
-    if "smash" not in df_used.columns and "ball_speed" in df_used.columns and "club_speed" in df_used.columns:
-        df_used["smash"] = df_used["ball_speed"] / df_used["club_speed"]
+        outliers = flag_outliers_per_club(df_club, bucket)
+        df_used = df_club.loc[~outliers].copy()
 
-    # Ensure key numeric columns are numeric
-    for col in [
-        "offline", "vla", "hla", "carry", "total",
-        "ball_speed", "club_speed", "spin", "spin_axis",
-        "aoa", "path", "face_to_path", "face_to_target",
-        "peak_height", "descent"
-    ]:
-        if col in df_used.columns:
-            df_used[col] = (
-                df_used[col]
-                .astype(str)
-                .str.replace("yds", "", regex=False)
-                .str.replace("yd", "", regex=False)
-                .str.replace(",", "", regex=False)
-                .str.strip()
-            )
-            df_used[col] = pd.to_numeric(df_used[col], errors="coerce")
+        # Ensure smash exists if missing
+        if "smash" not in df_used.columns and "ball_speed" in df_used.columns and "club_speed" in df_used.columns:
+            df_used["smash"] = df_used["ball_speed"] / df_used["club_speed"]
 
-    summary = summarize_club(df_used, bucket, n_total=n_total)
-    factors = limiting_factors(summary)
-    recs = recommend_for_club(summary)
+        # Force numeric conversion inside df_used too (handles weird dtype/object cases)
+        for col in numeric_cols:
+            if col in df_used.columns:
+                df_used[col] = (
+                    df_used[col].astype(str)
+                    .str.replace("yds", "", regex=False)
+                    .str.replace("yd", "", regex=False)
+                    .str.replace(",", "", regex=False)
+                    .str.strip()
+                )
+                df_used[col] = pd.to_numeric(df_used[col], errors="coerce")
 
-    club_results[bucket] = ClubAnalysis(
-        summary=summary,
-        limiting_factors=factors,
-        recommendations=recs,
-    )
+        summary = summarize_club(df_used, bucket, n_total=n_total)
+        factors = limiting_factors(summary)
+        recs = recommend_for_club(summary)
+
+        club_results[bucket] = ClubAnalysis(
+            summary=summary,
+            limiting_factors=factors,
+            recommendations=recs,
+        )
+
     return SessionResult(club_results=club_results)
+
        
 def session_to_dict(result: SessionResult) -> Dict[str, object]:
     """

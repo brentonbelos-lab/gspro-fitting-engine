@@ -390,13 +390,14 @@ def pick_hosel_reco(
             "message": f"Your hosel chart isn’t encoded for exact setting math yet. Guidance: {', '.join(direction)}.",
         }
 
-    scored.sort(key=lambda x: x[0])
-    top = scored[:3]
+        scored.sort(key=lambda x: x[0])
+    best = scored[0]
 
+    score, s, loft, lie = best
     return {
         "type": "exact",
         "current": current_setting,
-        "top": [{"setting": s, "loft_delta": loft, "lie_delta": lie, "score": score} for score, s, loft, lie in top],
+        "best": {"setting": s, "loft_delta": loft, "lie_delta": lie, "score": score},
     }
 
 
@@ -456,6 +457,14 @@ if not selected_buckets:
 
 df = canon_df[canon_df["bucket"].isin(selected_buckets)].copy()
 
+loft_to_dynamic_k = st.slider(
+    "Loft → delivered loft multiplier (k)",
+    min_value=0.6,
+    max_value=1.6,
+    value=1.0,
+    step=0.05,
+    help="How much a sleeve loft change alters delivered dynamic loft. 1.0 assumes delivery unchanged."
+)
 
 # -----------------------------
 # Hosel UI (Driver-focused for MVP)
@@ -580,10 +589,18 @@ for bucket in selected_buckets:
     # 3) Spin safety check
     recos: List[str] = []
 
-    if bucket == "DR":
-        # Determine needed loft change for launch (rough heuristic: +1° loft ~ +0.8° VLA)
-        needed_loft = 0.0
-        needed_lie = 0.0
+    # Better model:
+    # Launch ≈ 0.85 * DynamicLoft + 0.15 * AoA
+    # If AoA stays ~constant, a hosel loft change affects launch by:
+    # ΔLaunch ≈ 0.85 * (k * ΔStaticLoft)
+    LAUNCH_PER_STATIC_LOFT = 0.85 * loft_to_dynamic_k
+    
+    needed_loft = 0.0
+    ...
+        if vla_avg < launch_lo:
+            needed_loft = min(2.0, (launch_lo - vla_avg) / max(0.05, LAUNCH_PER_STATIC_LOFT))
+        elif vla_avg > launch_hi:
+            needed_loft = max(-2.0, -(vla_avg - launch_hi) / max(0.05, LAUNCH_PER_STATIC_LOFT))
 
         if not np.isnan(cs_avg):
             t = driver_targets(cs_avg)
@@ -636,13 +653,10 @@ for bucket in selected_buckets:
                 )
 
                 if reco["type"] == "exact":
-                    tops = reco["top"]
-                    lines = []
-                    for r in tops:
-                        lines.append(f"{r['setting']} (loft {r['loft_delta']:+.2f}°, lie {r['lie_delta']:+.2f}°)")
+                    b = reco["best"]
                     recos.append(
-                        f"Best matching settings (from your brand chart): **{', '.join(lines)}**. "
-                        f"Current: {reco['current']}."
+                        f"Hosel recommendation: change from **{reco['current']} → {b['setting']}** "
+                        f"(loft {b['loft_delta']:+.2f}°, lie {b['lie_delta']:+.2f}°)."
                     )
                 else:
                     recos.append(reco["message"])

@@ -114,7 +114,6 @@ def _canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # Final strip (just in case)
     df.columns = [c.strip() for c in df.columns]
-
     return df
 
 

@@ -79,7 +79,8 @@ def render_dispersion(
         st.warning(f"Missing '{dist_col}' in data.")
         return
 
-    c1, c2 = st.columns([1.2, 2.0])
+    c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
+
     with c1:
         sigma = st.select_slider(
             "Cloud size (σ)",
@@ -87,8 +88,23 @@ def render_dispersion(
             value=float(config.sigma),
             key="disp_sigma",
         )
+
     with c2:
-        show_ellipses = st.checkbox("Show shot clouds", value=config.show_ellipses, key="disp_show_ellipses")
+        show_ellipses = st.checkbox(
+            "Show shot clouds",
+            value=config.show_ellipses,
+            key="disp_show_ellipses"
+        )
+    
+    with c3:
+        fairway_width = st.slider(
+            "Fairway width (yd)",
+            min_value=10,
+            max_value=60,
+            value=30,
+            step=2,
+            help="Visual fairway band centered at 0 offline."
+        )
 
     plot_df = df.copy()
     plot_df = plot_df[np.isfinite(plot_df[dist_col].astype(float)) & np.isfinite(plot_df["offline_yd"].astype(float))].copy()
@@ -97,6 +113,32 @@ def render_dispersion(
         return
 
     fig = go.Figure()
+    # --- Fairway band shading ---
+    half_fw = fairway_width / 2
+    
+    fig.add_hrect(
+        y0=-half_fw,
+        y1=half_fw,
+        fillcolor="rgba(80,200,120,0.18)",  # fairway green
+        line_width=0,
+        layer="below"
+    )
+    
+    fig.add_hrect(
+        y0=half_fw,
+        y1=200,
+        fillcolor="rgba(200,200,200,0.08)",  # light rough
+        line_width=0,
+        layer="below"
+    )
+    
+    fig.add_hrect(
+        y0=-200,
+        y1=-half_fw,
+        fillcolor="rgba(200,200,200,0.08)",  # light rough
+        line_width=0,
+        layer="below"
+    )
     clubs = sorted(plot_df["club_id"].unique().tolist())
 
     for club in clubs:
@@ -164,13 +206,18 @@ def render_dispersion(
     fig.update_layout(
         title=title,
         xaxis_title="Carry (yd)" if dist_col == "carry_yd" else "Total (yd)",
-        yaxis_title="Offline (yd)  (Left - / Right +)",
+        yaxis_title="Offline (yd)  (Left ↑ / Right ↓)",
         height=520,
         margin=dict(l=40, r=20, t=60, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
     fig.update_xaxes(showgrid=True, zeroline=False)
-    fig.update_yaxes(showgrid=True, zeroline=True, zerolinewidth=1)
+    fig.update_yaxes(
+        showgrid=True,
+        zeroline=True,
+        zerolinewidth=1,
+        autorange="reversed"
+    )
 
     # Render chart
     st.plotly_chart(fig, use_container_width=True)

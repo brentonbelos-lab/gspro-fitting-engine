@@ -217,9 +217,7 @@ def flag_outliers_per_club(df_club: pd.DataFrame, bucket: str) -> pd.Series:
 
 def summarize_club(df_used: pd.DataFrame, bucket: str, n_total: int) -> ClubSummary:
 
-    def summarize_club(df_used: pd.DataFrame, bucket: str, n_total: int) -> ClubSummary:
-
-    # FINAL SAFETY: coerce messy GSPro fields
+    # FINAL SAFETY: convert messy GSPro values (L/R, degrees, etc.)
     for col in ["offline", "vla", "hla", "spin_axis", "face_to_target", "face_to_path"]:
         if col in df_used.columns:
             df_used[col] = _to_numeric_lr(df_used[col])

@@ -281,11 +281,38 @@ else:
     st.caption("No driver detected/selected (DR).")
 
 # Fairways (bulletproof slider)
+# Fairways (bulletproof slider + state clamp)
 if len(detected_fw) > 0:
     st.subheader("Fairway Woods")
+
     max_fw = min(6, len(detected_fw))
     default_fw = min(2, max_fw)
-    n_fw = st.slider("How many fairway woods to configure?", 1, max_fw, default_fw, 1)
+
+    fw_slider_key = "n_fw"
+
+    if fw_slider_key in st.session_state:
+        st.session_state[fw_slider_key] = int(
+            max(1, min(max_fw, st.session_state[fw_slider_key]))
+        )
+
+    n_fw = st.slider(
+        "How many fairway woods to configure?",
+        min_value=1,
+        max_value=max_fw,
+        value=st.session_state.get(fw_slider_key, default_fw),
+        step=1,
+        key=fw_slider_key,
+    )
+
+    for i in range(n_fw):
+        club_choice = st.selectbox(
+            f"Fairway slot {i+1}: which club?",
+            detected_fw,
+            key=f"fw_slot_{i}"
+        )
+        hosel_block(club_choice, f"Fairway: {club_choice}")
+else:
+    st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
     for i in range(n_fw):
         club_choice = st.selectbox(f"Fairway slot {i+1}: which club?", detected_fw, key=f"fw_slot_{i}")
         hosel_block(club_choice, f"Fairway: {club_choice}")
@@ -293,11 +320,38 @@ else:
     st.caption("No fairway woods detected/selected (e.g., 3W/5W/7W).")
 
 # Hybrids (bulletproof slider)
+# Hybrids (bulletproof slider + state clamp)
 if len(detected_hy) > 0:
     st.subheader("Hybrids")
+
     max_hy = min(6, len(detected_hy))
     default_hy = min(2, max_hy)
-    n_hy = st.slider("How many hybrids to configure?", 1, max_hy, default_hy, 1)
+
+    hy_slider_key = "n_hy"
+
+    if hy_slider_key in st.session_state:
+        st.session_state[hy_slider_key] = int(
+            max(1, min(max_hy, st.session_state[hy_slider_key]))
+        )
+
+    n_hy = st.slider(
+        "How many hybrids to configure?",
+        min_value=1,
+        max_value=max_hy,
+        value=st.session_state.get(hy_slider_key, default_hy),
+        step=1,
+        key=hy_slider_key,
+    )
+
+    for i in range(n_hy):
+        club_choice = st.selectbox(
+            f"Hybrid slot {i+1}: which club?",
+            detected_hy,
+            key=f"hy_slot_{i}"
+        )
+        hosel_block(club_choice, f"Hybrid: {club_choice}")
+else:
+    st.caption("No hybrids detected/selected (e.g., 3H/4H/5H).")
     for i in range(n_hy):
         club_choice = st.selectbox(f"Hybrid slot {i+1}: which club?", detected_hy, key=f"hy_slot_{i}")
         hosel_block(club_choice, f"Hybrid: {club_choice}")

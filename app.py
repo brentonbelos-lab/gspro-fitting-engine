@@ -197,6 +197,56 @@ for tab, club_code in zip(tabs, sorted(clubs.keys())):
         st.info(f"**{badge}**\n\n{why}")
 
         with right:
+
+            # ------------------------------
+            # Driver Specs + SureFit Tool
+            # ------------------------------
+            if club_code == "DR":
+
+                st.markdown("### Driver Specs")
+
+                handed = st.selectbox("Handedness", ["RH", "LH"])
+                current_setting = st.selectbox(
+                    "Current SureFit Setting",
+                    ["A1","A2","A3","A4","B1","B2","B3","B4","C1","C2","C3","C4","D1","D2","D3","D4"]
+                )
+
+                miss = st.selectbox(
+                    "Primary Miss Tendency",
+                    ["RIGHT", "LEFT", "BOTH", "NOT SURE"]
+                )
+
+                from fit_engine import recommend_titleist_surefit_driver, ClubSummary
+
+                summary_obj = ClubSummary(
+                    club=summary.get("club", "DR"),
+                    n_total=summary.get("n_total", 0),
+                    n_used=summary.get("n_used", 0),
+                    confidence=summary.get("confidence", "LOW"),
+                    metrics=summary.get("metrics", {}),
+                    variability=summary.get("variability", {}),
+                )
+
+                hosel_rec = recommend_titleist_surefit_driver(
+                    summary_obj,
+                    handed,
+                    current_setting,
+                    miss
+                )
+
+                st.markdown("### Hosel Setting Recommendation")
+
+                if hosel_rec["action"] == "change_setting":
+                    st.success(f"Change SureFit: **{hosel_rec['from']} → {hosel_rec['to']}**")
+                    st.write(hosel_rec["why"])
+                    st.code(hosel_rec["expected"], language="python")
+
+                else:
+                    st.info(f"Stay at **{hosel_rec['from']}** — {hosel_rec['why']}")
+
+            # ------------------------------
+            # Limiting Factors (existing)
+            # ------------------------------
             st.markdown("### Limiting Factors")
             if limiting:
                 for f in limiting:

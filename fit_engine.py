@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import re
 import pandas as pd
 
 
@@ -120,6 +121,35 @@ def _canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _to_numeric_safe(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
+def _to_numeric_lr(series: pd.Series) -> pd.Series:
+    """
+    Convert strings like:
+      '19.8 R' -> 19.8
+      '14.0 L' -> -14.0
+      '9.4°'   -> 9.4
+      '4.0° L' -> -4.0
+    """
+    s = series.astype(str).str.strip()
+
+    # remove degree symbol
+    s = s.str.replace("°", "", regex=False)
+
+    # detect Left
+    is_left = s.str.contains(r"(^L\b|\bL$|\bL\b)", regex=True)
+
+    # strip L/R letters
+    s = s.str.replace(r"\b[LR]\b", "", regex=True)   # standalone L/R
+    s = s.str.replace("L", "", regex=False)
+    s = s.str.replace("R", "", regex=False)
+
+    # remove commas and extra spaces
+    s = s.str.replace(",", "", regex=False).str.strip()
+
+    num = pd.to_numeric(s, errors="coerce")
+
+    # apply sign for left
+    num = np.where(is_left, -num, num)
+    return pd.Series(num, index=series.index)
 
 def _mad(x: np.ndarray) -> float:
     x = x[np.isfinite(x)]
@@ -451,6 +481,11 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
                 .str.strip()
             )
             df[col] = pd.to_numeric(df[col], errors="coerce")
+            
+    # Fix columns that may include 'L'/'R' or degree symbols in GSPro exports
+    for col in ["offline", "hla", "spin_axis", "face_to_target", "vla"]:
+        if col in df.columns:
+            df[col] = _to_numeric_lr(df[col])
 
     if "club" not in df.columns:
         raise ValueError("CSV missing club column (could not find Club/Club Name).")
@@ -486,6 +521,11 @@ def analyze_dataframe(df_raw: pd.DataFrame) -> SessionResult:
                     .str.strip()
                 )
                 df_used[col] = pd.to_numeric(df_used[col], errors="coerce")
+
+        # Fix columns that may include 'L'/'R' or degree symbols at the club level too
+        for col in ["offline", "hla", "spin_axis", "face_to_target", "vla"]:
+            if col in df_used.columns:
+                df_used[col] = _to_numeric_lr(df_used[col])
 
         summary = summarize_club(df_used, bucket, n_total=n_total)
         factors = limiting_factors(summary)

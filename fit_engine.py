@@ -220,6 +220,12 @@ def flag_outliers_per_club(df_club: pd.DataFrame, bucket: str) -> pd.Series:
 
 
 def summarize_club(df_used: pd.DataFrame, bucket: str, n_total: int) -> ClubSummary:
+
+    # FINAL SAFETY: force numeric conversion for columns that may contain L/R or degree symbols
+    for col in ["offline", "vla", "hla", "spin_axis", "face_to_target", "face_to_path"]:
+        if col in df_used.columns:
+            df_used[col] = _to_numeric_lr(df_used[col])
+
     def mean(col: str) -> float:
         return float(df_used[col].mean(skipna=True)) if col in df_used.columns else float("nan")
 

@@ -264,7 +264,7 @@ def render_dispersion(canon_df: pd.DataFrame):
         distance_mode = st.selectbox("Distance", ["carry", "total"], index=0)
 
     with c2:
-        fairway_width = st.slider("Fairway width (yd)", 25, 80, 45, 1)
+        fairway_width = st.slider("Fairway width (yd)", 30, 120, 70, 1)
 
     with c3:
         end_mode = st.selectbox("Fairway length", ["p95", "max"], index=0)

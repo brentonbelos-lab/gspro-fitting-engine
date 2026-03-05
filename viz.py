@@ -158,21 +158,41 @@ def _build_dispersion_figure(
     cd_cols = [c for c in cd_cols if c is not None]
     customdata = d[cd_cols].to_numpy() if cd_cols else None
 
-    fig.add_trace(go.Scatter(
-        x=d["_x"],
-        y=d["_y"],
-        mode="markers",
-        marker=dict(size=10, opacity=0.85),
-        name="Shots",
-        customdata=customdata,
-        hovertemplate=(
-            "<b>Shot</b><br>"
-            "Downrange: %{x:.1f} yd<br>"
-            "Lateral: %{y:.1f} yd<br>"
-            + ("<br>".join(hover_bits) + "<br>" if hover_bits else "")
-            + "<extra></extra>"
-        ),
-    ))
+    # Color palette (clean + readable)
+    club_palette = [
+        "#2563eb",  # blue
+        "#dc2626",  # red
+        "#16a34a",  # green
+        "#ea580c",  # orange
+        "#7c3aed",  # purple
+        "#0891b2",  # teal
+        "#be185d",  # pink
+    ]
+    
+    clubs_present = sorted(d["club_id"].dropna().unique())
+    
+    for i, club in enumerate(clubs_present):
+        dc = d[d["club_id"] == club]
+    
+        fig.add_trace(go.Scatter(
+            x=dc["_x"],
+            y=dc["_y"],
+            mode="markers",
+            marker=dict(
+                size=10,
+                opacity=0.85,
+                color=club_palette[i % len(club_palette)],
+            ),
+            name=club,
+            customdata=dc[cd_cols].to_numpy() if cd_cols else None,
+            hovertemplate=(
+                f"<b>{club}</b><br>"
+                "Downrange: %{x:.1f} yd<br>"
+                "Lateral: %{y:.1f} yd<br>"
+                + ("<br>".join(hover_bits) + "<br>" if hover_bits else "")
+                + "<extra></extra>"
+            ),
+        ))
 
     title = "Shot Dispersion Map"
     if club_filter:

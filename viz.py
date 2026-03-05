@@ -217,26 +217,8 @@ def _build_dispersion_figure(
     # Add stable shot index for selection
     d = d.reset_index(drop=True)
     d["_row_i"] = np.arange(len(d))
-
+    
     # Hover payload (only if columns exist)
-    hover_bits: List[str] = []
-    cd_cols: List[str] = []
-
-    def _add(col: str, fmt: str):
-        if col in d.columns:
-            cd_cols.append(col)
-            hover_bits.append(fmt)
-
-    _add("club_speed_mph", "Club Speed: %{customdata[%d]:.1f} mph")
-    _add("ball_speed_mph", "Ball Speed: %{customdata[%d]:.1f} mph")
-    _add("smash", "Smash: %{customdata[%d]:.2f}")
-    _add("vla_deg", "Launch: %{customdata[%d]:.1f}°")
-    _add("backspin_rpm", "Spin: %{customdata[%d]:.0f} rpm")
-
-    d = d.reset_index(drop=True)
-    d["_row_i"] = np.arange(len(d))
-
-    # Make a nicer hover payload (works even if some cols missing)
     hover_bits: List[str] = []
     cd_cols: List[str] = []
     

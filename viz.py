@@ -1,165 +1,96 @@
 # viz.py
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 
 
 # -----------------------------
-# Helpers
+# Config
 # -----------------------------
-def _to_float(series: pd.Series) -> pd.Series:
-    """
-    Robust numeric parser for GSPro exports.
-    Handles strings like "181.28 yds", "40.1°", "11.4 R", "-7.2 L".
-    """
-    if series is None:
-        return series
-    s = series.astype(str).str.strip()
-
-    # Convert "11.4 R" / "11.4 L" into signed values (R positive, L negative)
-    # Also handles "11.4R" / "11.4L"
-    def parse_one(x: str) -> float:
-        if x is None:
-            return np.nan
-        x = str(x).strip()
-        if x == "" or x.lower() in {"nan", "none"}:
-            return np.nan
-
-        # Directional suffix
-        m = re.match(r"^\s*([-+]?\d*\.?\d+)\s*([RL])\s*$", x, re.IGNORECASE)
-        if m:
-            val = float(m.group(1))
-            dirc = m.group(2).upper()
-            return val if dirc == "R" else -val
-
-        # Strip everything except digits, sign, decimal
-        m2 = re.search(r"[-+]?\d*\.?\d+", x)
-        return float(m2.group(0)) if m2 else np.nan
-
-    return s.map(parse_one)
-
-
-def _first_existing(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
-    for c in candidates:
-        if c in df.columns:
-            return c
-    return None
-
-
 @dataclass
 class DispersionConfig:
-    # Which distance to plot on X
-    distance_mode: str = "carry"  # "carry" or "total"
+    distance_mode: str = "carry"          # "carry" or "total"
+    fairway_width_yd: float = 45.0        # make wider if you want (e.g. 55)
+    fairway_end_mode: str = "p95"         # "max" or "p95" (p95 looks nicer)
+    right_miss_down: bool = True
 
-    # Fairway geometry
-    fairway_width_yd: float = 35.0  # you can widen this (e.g. 45)
-    fairway_start_x_yd: float = 0.0
-    fairway_end_x_yd: Optional[float] = None  # auto from data if None
+    x_pad_pct: float = 0.08               # padding on right side
+    y_pad_pct: float = 0.18               # padding on top/bottom
 
-    # Plot padding
-    x_pad_pct: float = 0.08  # 8% padding
-    y_pad_pct: float = 0.18  # 18% padding
-
-    # Right-miss-down behavior
-    right_miss_down: bool = True  # your preference
-
-    # Visual options
     show_centerline: bool = True
     show_target_marker: bool = True
+    keep_proportions: bool = True         # locks x/y scale ratio
 
 
-def build_dispersion_figure(
-    df_raw: pd.DataFrame,
-    cfg: DispersionConfig = DispersionConfig(),
+# -----------------------------
+# Core builder
+# -----------------------------
+def _build_dispersion_figure(
+    df: pd.DataFrame,
+    cfg: DispersionConfig,
     club_filter: Optional[str] = None,
 ) -> Tuple[go.Figure, pd.DataFrame]:
     """
-    Returns:
-      - Plotly Figure
-      - Cleaned dataframe used for plotting (includes columns: x_downrange, y_lateral_plot)
+    Uses FitCaddie canonical columns:
+      club_id, carry_yd, total_yd, offline_yd, vla_deg, backspin_rpm, etc.
+    Returns (fig, df_plot)
     """
+    d = df.copy()
 
-    df = df_raw.copy()
+    if club_filter:
+        d = d[d["club_id"] == club_filter].copy()
 
-    # --- Find likely GSPro columns (support both "portal" + "software" exports) ---
-    club_col = _first_existing(df, ["Club Name", "Club", "club", "ClubName"])
-    carry_col = _first_existing(df, ["Carry Dist (yd)", "Carry Distance", "Carry", "CarryDist"])
-    total_col = _first_existing(df, ["Total Dist (yd)", "Total Distance", "Total", "TotalDist"])
-    offline_col = _first_existing(df, ["Offline (yd)", "Offline", "Side", "Lateral (yd)", "Lateral"])
-    shot_col = _first_existing(df, ["Shot Number", "Global Shot Number", "Shot", "ShotNum", "shot_id"])
-
-    # If the key columns don't exist, fail gently with a helpful message in the chart
-    if offline_col is None or (carry_col is None and total_col is None):
-        fig = go.Figure()
-        fig.add_annotation(
-            text="Missing required columns for dispersion plot. Need Offline + (Carry or Total distance).",
-            x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False
-        )
-        fig.update_layout(height=650, margin=dict(l=20, r=20, t=30, b=20))
-        return fig, df
-
-    # --- Clean numeric fields ---
-    df["_offline_yd"] = _to_float(df[offline_col])
-
-    if cfg.distance_mode.lower() == "total" and total_col is not None:
-        df["_downrange_yd"] = _to_float(df[total_col])
+    # Choose X distance
+    if cfg.distance_mode.lower() == "total" and "total_yd" in d.columns:
+        d["_x"] = pd.to_numeric(d["total_yd"], errors="coerce")
     else:
-        # default to carry if available
-        if carry_col is not None:
-            df["_downrange_yd"] = _to_float(df[carry_col])
-        else:
-            df["_downrange_yd"] = _to_float(df[total_col])
+        d["_x"] = pd.to_numeric(d["carry_yd"], errors="coerce")
 
-    # Optional filter by club
-    if club_filter and club_col:
-        df = df[df[club_col].astype(str) == str(club_filter)].copy()
+    # Offline to Y (flip so Right plots DOWN)
+    off = pd.to_numeric(d["offline_yd"], errors="coerce")
+    d["_y"] = (-off) if cfg.right_miss_down else off
 
-    # Drop rows that can't plot
-    df = df.dropna(subset=["_offline_yd", "_downrange_yd"]).copy()
-    if df.empty:
+    # Basic cleaning
+    d = d.dropna(subset=["_x", "_y"]).copy()
+    if d.empty:
         fig = go.Figure()
         fig.add_annotation(
-            text="No plottable shots after cleaning / filtering.",
+            text="No plottable shots for dispersion map.",
             x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False
         )
-        fig.update_layout(height=650, margin=dict(l=20, r=20, t=30, b=20))
-        return fig, df
+        fig.update_layout(height=680, margin=dict(l=20, r=20, t=45, b=20))
+        return fig, d
 
-    # --- Apply your axis rule: right miss should appear DOWN ---
-    # Assume Offline + = Right, - = Left (common). If your data is opposite, flip sign here.
-    lateral = df["_offline_yd"].astype(float)
-    y_plot = -lateral if cfg.right_miss_down else lateral
-
-    df["x_downrange"] = df["_downrange_yd"].astype(float)
-    df["y_lateral_plot"] = y_plot
-
-    # --- Compute bounds + padding ---
+    # X range
     x_min = 0.0
-    x_max_data = float(df["x_downrange"].max())
-    x_pad = max(5.0, x_max_data * cfg.x_pad_pct)
-    x_max = x_max_data + x_pad
+    x_max_data = float(d["_x"].max())
 
-    y_abs_max = float(np.nanmax(np.abs(df["y_lateral_plot"])))
+    if cfg.fairway_end_mode == "p95":
+        fw_x1 = float(np.nanpercentile(d["_x"].values, 95))
+        fw_x1 = max(fw_x1, float(np.nanpercentile(d["_x"].values, 75)))
+    else:
+        fw_x1 = x_max_data
+
+    x_pad = max(5.0, fw_x1 * cfg.x_pad_pct)
+    x_max = fw_x1 + x_pad
+
+    # Y range
+    y_abs_max = float(np.nanmax(np.abs(d["_y"].values)))
     y_pad = max(6.0, y_abs_max * cfg.y_pad_pct)
-    y_lim = y_abs_max + y_pad
-    # Ensure a reasonable minimum span so the fairway doesn't look squeezed
-    y_lim = max(y_lim, cfg.fairway_width_yd * 0.9)
+    y_lim = max(y_abs_max + y_pad, cfg.fairway_width_yd * 0.9)
 
-    # --- Fairway geometry (centered on 0 lateral) ---
     fw_half = cfg.fairway_width_yd / 2.0
-    fw_x0 = cfg.fairway_start_x_yd
-    fw_x1 = cfg.fairway_end_x_yd if cfg.fairway_end_x_yd is not None else x_max_data
 
-    # --- Build figure ---
+    # Build plot
     fig = go.Figure()
 
-    # Background "course" layer (subtle)
+    # Turf tint background
     fig.add_shape(
         type="rect",
         x0=x_min, x1=x_max,
@@ -169,27 +100,15 @@ def build_dispersion_figure(
         layer="below",
     )
 
-    # Fairway rectangle
+    # Fairway
     fig.add_shape(
         type="rect",
-        x0=fw_x0, x1=fw_x1,
+        x0=0.0, x1=fw_x1,
         y0=-fw_half, y1=fw_half,
         line=dict(color="rgba(20, 80, 30, 0.35)", width=1),
         fillcolor="rgba(30, 150, 70, 0.14)",
         layer="below",
     )
-
-    # Fairway edges (for crispness)
-    fig.add_trace(go.Scatter(
-        x=[fw_x0, fw_x1, fw_x1, fw_x0, fw_x0],
-        y=[-fw_half, -fw_half, fw_half, fw_half, -fw_half],
-        mode="lines",
-        line=dict(width=1),
-        hoverinfo="skip",
-        showlegend=False,
-        name="Fairway",
-        opacity=0.55,
-    ))
 
     # Centerline
     if cfg.show_centerline:
@@ -204,54 +123,58 @@ def build_dispersion_figure(
             name="Centerline",
         ))
 
-    # Target marker (at average downrange, centerline)
+    # Target marker (mean downrange)
     if cfg.show_target_marker:
-        target_x = float(df["x_downrange"].mean())
+        tx = float(d["_x"].mean())
         fig.add_trace(go.Scatter(
-            x=[target_x],
-            y=[0],
+            x=[tx], y=[0],
             mode="markers",
             marker=dict(size=10, symbol="x"),
-            hovertemplate="Target<br>Downrange: %{x:.1f} yd<br>Lateral: %{y:.1f} yd<extra></extra>",
+            hovertemplate="Target<br>Downrange: %{x:.1f} yd<extra></extra>",
             showlegend=False,
-            name="Target",
             opacity=0.7,
         ))
 
-    # Shot markers (interactive)
-    # Use shot id if present, else index
-    if shot_col is not None:
-        df["_shot_id"] = df[shot_col].astype(str)
-    else:
-        df["_shot_id"] = df.index.astype(str)
+    # Add stable shot index for selection
+    d = d.reset_index(drop=True)
+    d["_row_i"] = np.arange(len(d))
 
-    # Hover payload
-    hover_cols = []
-    if club_col: hover_cols.append(club_col)
-    if carry_col: hover_cols.append(carry_col)
-    if total_col: hover_cols.append(total_col)
-    if offline_col: hover_cols.append(offline_col)
+    # Make a nicer hover payload (works even if some cols missing)
+    hover_bits = []
+    if "club_speed_mph" in d.columns: hover_bits.append("Club Speed: %{customdata[0]:.1f} mph")
+    if "ball_speed_mph" in d.columns: hover_bits.append("Ball Speed: %{customdata[1]:.1f} mph")
+    if "smash" in d.columns: hover_bits.append("Smash: %{customdata[2]:.2f}")
+    if "vla_deg" in d.columns: hover_bits.append("Launch: %{customdata[3]:.1f}°")
+    if "backspin_rpm" in d.columns: hover_bits.append("Spin: %{customdata[4]:.0f} rpm")
 
-    # customdata includes row index (for selection)
-    df["_row_i"] = np.arange(len(df))
+    # Customdata order must match above
+    cd_cols = [
+        "club_speed_mph" if "club_speed_mph" in d.columns else None,
+        "ball_speed_mph" if "ball_speed_mph" in d.columns else None,
+        "smash" if "smash" in d.columns else None,
+        "vla_deg" if "vla_deg" in d.columns else None,
+        "backspin_rpm" if "backspin_rpm" in d.columns else None,
+    ]
+    cd_cols = [c for c in cd_cols if c is not None]
+    customdata = d[cd_cols].to_numpy() if cd_cols else None
 
     fig.add_trace(go.Scatter(
-        x=df["x_downrange"],
-        y=df["y_lateral_plot"],
+        x=d["_x"],
+        y=d["_y"],
         mode="markers",
         marker=dict(size=10, opacity=0.85),
         name="Shots",
-        customdata=np.stack([df["_row_i"].values, df["_shot_id"].values], axis=1),
+        customdata=customdata,
         hovertemplate=(
-            "<b>Shot %{customdata[1]}</b><br>"
+            "<b>Shot</b><br>"
             "Downrange: %{x:.1f} yd<br>"
             "Lateral: %{y:.1f} yd<br>"
-            "<extra></extra>"
+            + ("<br>".join(hover_bits) + "<br>" if hover_bits else "")
+            + "<extra></extra>"
         ),
     ))
 
-    # Layout polish
-    title = "Shot Dispersion"
+    title = "Shot Dispersion Map"
     if club_filter:
         title += f" — {club_filter}"
 
@@ -270,41 +193,128 @@ def build_dispersion_figure(
             range=[-y_lim, y_lim],
             zeroline=False,
             showgrid=True,
-            scaleanchor="x",  # keeps fairway proportions correct
-            scaleratio=1,
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 
-    return fig, df
+    # Keep fairway proportions true (no stretching)
+    if cfg.keep_proportions:
+        fig.update_yaxes(scaleanchor="x", scaleratio=1)
+
+    return fig, d
 
 
-def pick_selected_shot(
-    plot_state: Optional[dict],
-    df_plot: pd.DataFrame
-) -> Optional[pd.Series]:
+def _extract_selected_point(plot_state: Optional[dict]) -> Optional[int]:
     """
-    Streamlit Plotly selection info usually lands in st.session_state[key].
-    We try to extract the selected point and return the corresponding df row.
+    Streamlit plotly selection structure varies slightly by version.
+    Tries a few common shapes and returns the selected point index if possible.
     """
     if not plot_state or not isinstance(plot_state, dict):
         return None
 
-    # Streamlit versions differ; handle a couple common shapes
-    # Expected: plot_state["selection"]["points"] -> list with point data
-    selection = plot_state.get("selection") or plot_state.get("selected_points") or {}
-    points = selection.get("points") if isinstance(selection, dict) else None
-    if not points:
-        return None
+    # Newer Streamlit: state["selection"]["points"]
+    sel = plot_state.get("selection")
+    if isinstance(sel, dict):
+        pts = sel.get("points")
+        if isinstance(pts, list) and len(pts) > 0:
+            p0 = pts[0]
+            # Plotly point index is often present
+            pi = p0.get("pointIndex")
+            if pi is not None:
+                return int(pi)
 
-    # First selected point
-    p0 = points[0]
-
-    # Plotly points often contain "customdata" with our [row_i, shot_id]
-    cd = p0.get("customdata")
-    if cd and len(cd) >= 1:
-        row_i = int(cd[0])
-        if 0 <= row_i < len(df_plot):
-            return df_plot.iloc[row_i]
+    # Sometimes: state["selected_points"]
+    sel2 = plot_state.get("selected_points")
+    if isinstance(sel2, dict):
+        pts = sel2.get("points")
+        if isinstance(pts, list) and len(pts) > 0:
+            pi = pts[0].get("pointIndex")
+            if pi is not None:
+                return int(pi)
 
     return None
+
+
+# -----------------------------
+# Public function used by app.py
+# -----------------------------
+def render_dispersion(canon_df: pd.DataFrame):
+    """
+    Called by app.py as: render_dispersion(canon_df)
+    Renders:
+      - club filter dropdown
+      - distance mode toggle
+      - fairway width slider
+      - plot
+      - selected shot details panel
+    """
+
+    if canon_df is None or canon_df.empty:
+        st.info("No shot data available.")
+        return
+
+    # Controls row
+    c0, c1, c2, c3 = st.columns([1.4, 1.2, 1.2, 1.2])
+
+    clubs = sorted([c for c in canon_df["club_id"].dropna().unique().tolist()])
+    with c0:
+        club_filter = st.selectbox("Club", ["ALL"] + clubs, index=0)
+
+    with c1:
+        distance_mode = st.selectbox("Distance", ["carry", "total"], index=0)
+
+    with c2:
+        fairway_width = st.slider("Fairway width (yd)", 25, 80, 45, 1)
+
+    with c3:
+        end_mode = st.selectbox("Fairway length", ["p95", "max"], index=0)
+
+    cfg = DispersionConfig(
+        distance_mode=distance_mode,
+        fairway_width_yd=float(fairway_width),
+        fairway_end_mode=end_mode,
+        right_miss_down=True,
+    )
+
+    club = None if club_filter == "ALL" else club_filter
+    fig, df_plot = _build_dispersion_figure(canon_df, cfg=cfg, club_filter=club)
+
+    plot_key = "dispersion_plot"
+
+    # Try to enable selection (works on Streamlit versions that support it)
+    try:
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key=plot_key,
+            on_select="rerun",
+            selection_mode=("points",),
+        )
+        plot_state = st.session_state.get(plot_key)
+        selected_i = _extract_selected_point(plot_state)
+    except Exception:
+        # Fallback: still show chart, but no selection
+        st.plotly_chart(fig, use_container_width=True)
+        selected_i = None
+
+    st.subheader("Selected Shot")
+
+    if selected_i is None:
+        st.caption("Tap a point (or box-select) to see shot details.")
+        return
+
+    # Because pointIndex corresponds to df_plot row order
+    if 0 <= selected_i < len(df_plot):
+        row = df_plot.iloc[selected_i]
+        # Show a clean shot detail set (only columns that exist)
+        show_cols = [
+            "club_raw", "club_id",
+            "club_speed_mph", "ball_speed_mph", "smash",
+            "carry_yd", "total_yd", "offline_yd",
+            "vla_deg", "backspin_rpm", "aoa_deg",
+            "club_path_deg", "face_to_path_deg", "face_to_target_deg",
+        ]
+        payload = {c: row[c] for c in show_cols if c in df_plot.columns and pd.notna(row.get(c))}
+        st.json(payload)
+    else:
+        st.caption("Selection index out of range (unexpected).")

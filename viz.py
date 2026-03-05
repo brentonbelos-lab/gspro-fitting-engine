@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import numpy as np
 import pandas as pd
@@ -16,16 +16,80 @@ import streamlit as st
 @dataclass
 class DispersionConfig:
     distance_mode: str = "carry"          # "carry" or "total"
-    fairway_width_yd: float = 45.0        # make wider if you want (e.g. 55)
-    fairway_end_mode: str = "p95"         # "max" or "p95" (p95 looks nicer)
+    fairway_width_yd: float = 70.0        # default wider
+    fairway_end_mode: str = "p95"         # "max" or "p95"
     right_miss_down: bool = True
 
-    x_pad_pct: float = 0.08               # padding on right side
-    y_pad_pct: float = 0.18               # padding on top/bottom
+    # Padding
+    x_pad_pct: float = 0.08
+    y_pad_pct: float = 0.18
 
+    # Visual toggles
     show_centerline: bool = True
     show_target_marker: bool = True
-    keep_proportions: bool = True         # locks x/y scale ratio
+    keep_proportions: bool = True
+
+    # Dispersion circle settings
+    circle_mode: str = "p90"              # "p80" | "p90" | "p95" | "1sigma" | "2sigma"
+    circle_min_radius_yd: float = 5.0     # prevent tiny circles
+    circle_opacity: float = 0.18
+
+
+# -----------------------------
+# Dispersion circle helpers
+# -----------------------------
+def _club_circle_radius(dx: np.ndarray, dy: np.ndarray, mode: str) -> float:
+    """
+    dx, dy are centered coordinates for a club.
+    Returns a radius in yards.
+    - pXX: radius that contains XX% of points (based on radial distance)
+    - 1sigma/2sigma: based on combined std in x/y (rough but intuitive)
+    """
+    r = np.sqrt(dx * dx + dy * dy)
+    r = r[np.isfinite(r)]
+    if r.size == 0:
+        return 0.0
+
+    m = mode.lower().strip()
+    if m.startswith("p") and len(m) >= 2:
+        try:
+            p = float(m[1:])
+            return float(np.nanpercentile(r, p))
+        except Exception:
+            pass
+
+    if m == "1sigma":
+        sx = float(np.nanstd(dx, ddof=1)) if dx.size > 1 else float(np.nanstd(dx))
+        sy = float(np.nanstd(dy, ddof=1)) if dy.size > 1 else float(np.nanstd(dy))
+        return float(np.sqrt(sx * sx + sy * sy))
+
+    if m == "2sigma":
+        sx = float(np.nanstd(dx, ddof=1)) if dx.size > 1 else float(np.nanstd(dx))
+        sy = float(np.nanstd(dy, ddof=1)) if dy.size > 1 else float(np.nanstd(dy))
+        return 2.0 * float(np.sqrt(sx * sx + sy * sy))
+
+    # fallback
+    return float(np.nanpercentile(r, 90))
+
+
+def _circle_trace(cx: float, cy: float, radius: float, color: str, name: str, opacity: float) -> go.Scatter:
+    """
+    Draw a circle as a parametric line trace (works with scaleanchor properly).
+    """
+    t = np.linspace(0, 2 * np.pi, 181)
+    x = cx + radius * np.cos(t)
+    y = cy + radius * np.sin(t)
+
+    return go.Scatter(
+        x=x,
+        y=y,
+        mode="lines",
+        line=dict(width=2, color=color),
+        name=f"{name} circle",
+        opacity=opacity,
+        hoverinfo="skip",
+        showlegend=False,  # keeps legend clean; shots already appear in legend
+    )
 
 
 # -----------------------------
@@ -85,98 +149,95 @@ def _build_dispersion_figure(
     y_pad = max(6.0, y_abs_max * cfg.y_pad_pct)
     y_lim = max(y_abs_max + y_pad, cfg.fairway_width_yd * 0.9)
 
-    fw_half = cfg.fairway_width_yd / 2.0
-
     # Build plot
     fig = go.Figure()
 
     # -----------------------------
     # Layered course look
     # -----------------------------
-    
     rough_half = cfg.fairway_width_yd * 1.8
     firstcut_half = cfg.fairway_width_yd * 1.25
     fw_half = cfg.fairway_width_yd / 2.0
-    
+
     # ROUGH (lightest)
     fig.add_shape(
         type="rect",
         x0=x_min, x1=x_max,
         y0=-rough_half, y1=rough_half,
         line=dict(width=0),
-        fillcolor="rgba(34, 139, 34, 0.08)",
+        fillcolor="rgba(34, 139, 34, 0.06)",
         layer="below",
     )
-    
-    # FIRST CUT
+
+    # FIRST CUT (medium)
     fig.add_shape(
         type="rect",
         x0=0, x1=fw_x1,
         y0=-firstcut_half, y1=firstcut_half,
         line=dict(width=0),
-        fillcolor="rgba(34, 139, 34, 0.14)",
+        fillcolor="rgba(34, 139, 34, 0.12)",
         layer="below",
     )
-    
-    # FAIRWAY (clean center)
+
+    # FAIRWAY (darkest)
     fig.add_shape(
         type="rect",
         x0=0, x1=fw_x1,
         y0=-fw_half, y1=fw_half,
-        line=dict(color="rgba(20,80,30,0.35)", width=1),
+        line=dict(color="rgba(20,80,30,0.30)", width=1),
         fillcolor="rgba(30,150,70,0.22)",
         layer="below",
     )
-    
-        # Centerline
-        if cfg.show_centerline:
-            fig.add_trace(go.Scatter(
-                x=[x_min, x_max],
-                y=[0, 0],
-                mode="lines",
-                line=dict(dash="dash", width=1),
-                hoverinfo="skip",
-                showlegend=False,
-                opacity=0.45,
-                name="Centerline",
-            ))
-    
-        # Target marker (mean downrange)
-        if cfg.show_target_marker:
-            tx = float(d["_x"].mean())
-            fig.add_trace(go.Scatter(
-                x=[tx], y=[0],
-                mode="markers",
-                marker=dict(size=10, symbol="x"),
-                hovertemplate="Target<br>Downrange: %{x:.1f} yd<extra></extra>",
-                showlegend=False,
-                opacity=0.7,
-            ))
+
+    # Centerline
+    if cfg.show_centerline:
+        fig.add_trace(go.Scatter(
+            x=[x_min, x_max],
+            y=[0, 0],
+            mode="lines",
+            line=dict(dash="dash", width=1),
+            hoverinfo="skip",
+            showlegend=False,
+            opacity=0.45,
+            name="Centerline",
+        ))
+
+    # Target marker (mean downrange)
+    if cfg.show_target_marker:
+        tx = float(d["_x"].mean())
+        fig.add_trace(go.Scatter(
+            x=[tx], y=[0],
+            mode="markers",
+            marker=dict(size=10, symbol="x"),
+            hovertemplate="Target<br>Downrange: %{x:.1f} yd<extra></extra>",
+            showlegend=False,
+            opacity=0.7,
+        ))
 
     # Add stable shot index for selection
     d = d.reset_index(drop=True)
     d["_row_i"] = np.arange(len(d))
 
-    # Make a nicer hover payload (works even if some cols missing)
-    hover_bits = []
-    if "club_speed_mph" in d.columns: hover_bits.append("Club Speed: %{customdata[0]:.1f} mph")
-    if "ball_speed_mph" in d.columns: hover_bits.append("Ball Speed: %{customdata[1]:.1f} mph")
-    if "smash" in d.columns: hover_bits.append("Smash: %{customdata[2]:.2f}")
-    if "vla_deg" in d.columns: hover_bits.append("Launch: %{customdata[3]:.1f}°")
-    if "backspin_rpm" in d.columns: hover_bits.append("Spin: %{customdata[4]:.0f} rpm")
+    # Hover payload (only if columns exist)
+    hover_bits: List[str] = []
+    cd_cols: List[str] = []
 
-    # Customdata order must match above
-    cd_cols = [
-        "club_speed_mph" if "club_speed_mph" in d.columns else None,
-        "ball_speed_mph" if "ball_speed_mph" in d.columns else None,
-        "smash" if "smash" in d.columns else None,
-        "vla_deg" if "vla_deg" in d.columns else None,
-        "backspin_rpm" if "backspin_rpm" in d.columns else None,
-    ]
-    cd_cols = [c for c in cd_cols if c is not None]
-    customdata = d[cd_cols].to_numpy() if cd_cols else None
+    def _add(col: str, fmt: str):
+        if col in d.columns:
+            cd_cols.append(col)
+            hover_bits.append(fmt)
 
-    # Color palette (clean + readable)
+    _add("club_speed_mph", "Club Speed: %{customdata[%d]:.1f} mph")
+    _add("ball_speed_mph", "Ball Speed: %{customdata[%d]:.1f} mph")
+    _add("smash", "Smash: %{customdata[%d]:.2f}")
+    _add("vla_deg", "Launch: %{customdata[%d]:.1f}°")
+    _add("backspin_rpm", "Spin: %{customdata[%d]:.0f} rpm")
+
+    # Fix indices in hover_bits now that we know order
+    for i in range(len(hover_bits)):
+        hover_bits[i] = hover_bits[i] % i
+
+    # Color palette
     club_palette = [
         "#2563eb",  # blue
         "#dc2626",  # red
@@ -185,30 +246,62 @@ def _build_dispersion_figure(
         "#7c3aed",  # purple
         "#0891b2",  # teal
         "#be185d",  # pink
+        "#0f766e",  # deep teal
     ]
-    
+
     clubs_present = sorted(d["club_id"].dropna().unique())
-    
+
+    # --- Per-club traces + dispersion circles ---
     for i, club in enumerate(clubs_present):
-        dc = d[d["club_id"] == club]
-    
+        color = club_palette[i % len(club_palette)]
+        dc = d[d["club_id"] == club].copy()
+        if dc.empty:
+            continue
+
+        customdata = dc[cd_cols].to_numpy() if cd_cols else None
+
+        # Points
         fig.add_trace(go.Scatter(
             x=dc["_x"],
             y=dc["_y"],
             mode="markers",
-            marker=dict(
-                size=10,
-                opacity=0.85,
-                color=club_palette[i % len(club_palette)],
-            ),
-            name=club,
-            customdata=dc[cd_cols].to_numpy() if cd_cols else None,
+            marker=dict(size=10, opacity=0.85, color=color),
+            name=str(club),
+            customdata=customdata,
             hovertemplate=(
                 f"<b>{club}</b><br>"
                 "Downrange: %{x:.1f} yd<br>"
                 "Lateral: %{y:.1f} yd<br>"
                 + ("<br>".join(hover_bits) + "<br>" if hover_bits else "")
                 + "<extra></extra>"
+            ),
+        ))
+
+        # Circle center (mean)
+        cx = float(dc["_x"].mean())
+        cy = float(dc["_y"].mean())
+
+        dx = (dc["_x"].values - cx).astype(float)
+        dy = (dc["_y"].values - cy).astype(float)
+
+        rad = _club_circle_radius(dx, dy, cfg.circle_mode)
+        rad = max(rad, cfg.circle_min_radius_yd)
+
+        fig.add_trace(_circle_trace(cx, cy, rad, color=color, name=str(club), opacity=cfg.circle_opacity))
+
+        # Small center dot for the club mean
+        fig.add_trace(go.Scatter(
+            x=[cx],
+            y=[cy],
+            mode="markers",
+            marker=dict(size=6, color=color, symbol="circle"),
+            showlegend=False,
+            hovertemplate=(
+                f"<b>{club} mean</b><br>"
+                "Downrange: %{x:.1f} yd<br>"
+                "Lateral: %{y:.1f} yd<br>"
+                f"Circle radius ({cfg.circle_mode}): {rad:.1f} yd"
+                "<extra></extra>"
             ),
         ))
 
@@ -235,7 +328,6 @@ def _build_dispersion_figure(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 
-    # Keep fairway proportions true (no stretching)
     if cfg.keep_proportions:
         fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
@@ -245,23 +337,20 @@ def _build_dispersion_figure(
 def _extract_selected_point(plot_state: Optional[dict]) -> Optional[int]:
     """
     Streamlit plotly selection structure varies slightly by version.
-    Tries a few common shapes and returns the selected point index if possible.
+    Returns the selected point index if possible.
     """
     if not plot_state or not isinstance(plot_state, dict):
         return None
 
-    # Newer Streamlit: state["selection"]["points"]
     sel = plot_state.get("selection")
     if isinstance(sel, dict):
         pts = sel.get("points")
         if isinstance(pts, list) and len(pts) > 0:
             p0 = pts[0]
-            # Plotly point index is often present
             pi = p0.get("pointIndex")
             if pi is not None:
                 return int(pi)
 
-    # Sometimes: state["selected_points"]
     sel2 = plot_state.get("selected_points")
     if isinstance(sel2, dict):
         pts = sel2.get("points")
@@ -279,20 +368,12 @@ def _extract_selected_point(plot_state: Optional[dict]) -> Optional[int]:
 def render_dispersion(canon_df: pd.DataFrame):
     """
     Called by app.py as: render_dispersion(canon_df)
-    Renders:
-      - club filter dropdown
-      - distance mode toggle
-      - fairway width slider
-      - plot
-      - selected shot details panel
     """
-
     if canon_df is None or canon_df.empty:
         st.info("No shot data available.")
         return
 
-    # Controls row
-    c0, c1, c2, c3 = st.columns([1.4, 1.2, 1.2, 1.2])
+    c0, c1, c2, c3, c4 = st.columns([1.4, 1.2, 1.2, 1.2, 1.2])
 
     clubs = sorted([c for c in canon_df["club_id"].dropna().unique().tolist()])
     with c0:
@@ -302,16 +383,20 @@ def render_dispersion(canon_df: pd.DataFrame):
         distance_mode = st.selectbox("Distance", ["carry", "total"], index=0)
 
     with c2:
-        fairway_width = st.slider("Fairway width (yd)", 30, 120, 70, 1)
+        fairway_width = st.slider("Fairway width (yd)", 30, 140, 70, 1)
 
     with c3:
         end_mode = st.selectbox("Fairway length", ["p95", "max"], index=0)
+
+    with c4:
+        circle_mode = st.selectbox("Dispersion circle", ["p80", "p90", "p95", "1sigma", "2sigma"], index=1)
 
     cfg = DispersionConfig(
         distance_mode=distance_mode,
         fairway_width_yd=float(fairway_width),
         fairway_end_mode=end_mode,
         right_miss_down=True,
+        circle_mode=circle_mode,
     )
 
     club = None if club_filter == "ALL" else club_filter
@@ -319,7 +404,6 @@ def render_dispersion(canon_df: pd.DataFrame):
 
     plot_key = "dispersion_plot"
 
-    # Try to enable selection (works on Streamlit versions that support it)
     try:
         st.plotly_chart(
             fig,
@@ -331,7 +415,6 @@ def render_dispersion(canon_df: pd.DataFrame):
         plot_state = st.session_state.get(plot_key)
         selected_i = _extract_selected_point(plot_state)
     except Exception:
-        # Fallback: still show chart, but no selection
         st.plotly_chart(fig, use_container_width=True)
         selected_i = None
 
@@ -341,10 +424,8 @@ def render_dispersion(canon_df: pd.DataFrame):
         st.caption("Tap a point (or box-select) to see shot details.")
         return
 
-    # Because pointIndex corresponds to df_plot row order
     if 0 <= selected_i < len(df_plot):
         row = df_plot.iloc[selected_i]
-        # Show a clean shot detail set (only columns that exist)
         show_cols = [
             "club_raw", "club_id",
             "club_speed_mph", "ball_speed_mph", "smash",

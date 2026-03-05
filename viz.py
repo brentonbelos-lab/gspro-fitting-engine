@@ -90,50 +90,68 @@ def _build_dispersion_figure(
     # Build plot
     fig = go.Figure()
 
-    # Turf tint background
+    # -----------------------------
+    # Layered course look
+    # -----------------------------
+    
+    rough_half = cfg.fairway_width_yd * 1.8
+    firstcut_half = cfg.fairway_width_yd * 1.25
+    fw_half = cfg.fairway_width_yd / 2.0
+    
+    # ROUGH (lightest)
     fig.add_shape(
         type="rect",
         x0=x_min, x1=x_max,
-        y0=-y_lim, y1=y_lim,
+        y0=-rough_half, y1=rough_half,
         line=dict(width=0),
-        fillcolor="rgba(25, 90, 35, 0.10)",
+        fillcolor="rgba(34, 139, 34, 0.08)",
         layer="below",
     )
-
-    # Fairway
+    
+    # FIRST CUT
     fig.add_shape(
         type="rect",
-        x0=0.0, x1=fw_x1,
-        y0=-fw_half, y1=fw_half,
-        line=dict(color="rgba(20, 80, 30, 0.35)", width=1),
-        fillcolor="rgba(30, 150, 70, 0.14)",
+        x0=0, x1=fw_x1,
+        y0=-firstcut_half, y1=firstcut_half,
+        line=dict(width=0),
+        fillcolor="rgba(34, 139, 34, 0.14)",
         layer="below",
     )
-
-    # Centerline
-    if cfg.show_centerline:
-        fig.add_trace(go.Scatter(
-            x=[x_min, x_max],
-            y=[0, 0],
-            mode="lines",
-            line=dict(dash="dash", width=1),
-            hoverinfo="skip",
-            showlegend=False,
-            opacity=0.45,
-            name="Centerline",
-        ))
-
-    # Target marker (mean downrange)
-    if cfg.show_target_marker:
-        tx = float(d["_x"].mean())
-        fig.add_trace(go.Scatter(
-            x=[tx], y=[0],
-            mode="markers",
-            marker=dict(size=10, symbol="x"),
-            hovertemplate="Target<br>Downrange: %{x:.1f} yd<extra></extra>",
-            showlegend=False,
-            opacity=0.7,
-        ))
+    
+    # FAIRWAY (clean center)
+    fig.add_shape(
+        type="rect",
+        x0=0, x1=fw_x1,
+        y0=-fw_half, y1=fw_half,
+        line=dict(color="rgba(20,80,30,0.35)", width=1),
+        fillcolor="rgba(30,150,70,0.22)",
+        layer="below",
+    )
+    
+        # Centerline
+        if cfg.show_centerline:
+            fig.add_trace(go.Scatter(
+                x=[x_min, x_max],
+                y=[0, 0],
+                mode="lines",
+                line=dict(dash="dash", width=1),
+                hoverinfo="skip",
+                showlegend=False,
+                opacity=0.45,
+                name="Centerline",
+            ))
+    
+        # Target marker (mean downrange)
+        if cfg.show_target_marker:
+            tx = float(d["_x"].mean())
+            fig.add_trace(go.Scatter(
+                x=[tx], y=[0],
+                mode="markers",
+                marker=dict(size=10, symbol="x"),
+                hovertemplate="Target<br>Downrange: %{x:.1f} yd<extra></extra>",
+                showlegend=False,
+                opacity=0.7,
+            ))
 
     # Add stable shot index for selection
     d = d.reset_index(drop=True)

@@ -233,9 +233,28 @@ def _build_dispersion_figure(
     _add("vla_deg", "Launch: %{customdata[%d]:.1f}°")
     _add("backspin_rpm", "Spin: %{customdata[%d]:.0f} rpm")
 
-    # Fix indices in hover_bits now that we know order
-    for i in range(len(hover_bits)):
-        hover_bits[i] = hover_bits[i] % i
+    d = d.reset_index(drop=True)
+    d["_row_i"] = np.arange(len(d))
+
+    # Make a nicer hover payload (works even if some cols missing)
+    hover_bits: List[str] = []
+    cd_cols: List[str] = []
+    
+    def _add(col: str, label: str, fmt: str):
+        """
+        Adds a column to customdata and a matching hover line.
+        fmt should be like '.1f', '.2f', '.0f'
+        """
+        if col in d.columns:
+            idx = len(cd_cols)
+            cd_cols.append(col)
+            hover_bits.append(f"{label}: %{{customdata[{idx}]:{fmt}}}")
+    
+    _add("club_speed_mph", "Club Speed (mph)", ".1f")
+    _add("ball_speed_mph", "Ball Speed (mph)", ".1f")
+    _add("smash", "Smash", ".2f")
+    _add("vla_deg", "Launch (°)", ".1f")
+    _add("backspin_rpm", "Spin (rpm)", ".0f")
 
     # Color palette
     club_palette = [

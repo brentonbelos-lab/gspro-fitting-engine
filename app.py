@@ -273,62 +273,61 @@ def _driver_setup_from_prefix(prefix: str) -> DriverUserSetup:
         shaft_flex=st.session_state[f"{prefix}_driver_shaft_flex"],
     )
 
-    TOP_BRANDS = [
-        "Titleist",
-        "TaylorMade",
-        "Callaway",
-        "PING",
-        "Mizuno",
-        "Srixon",
-        "Cleveland",
-        "Cobra",
-        "PXG",
-        "Wilson Staff",
-        "Other",
-    ]
-    
-    DRIVER_MODEL_OPTIONS = {
-        "Titleist": ["GT2", "GT3", "GT4", "TSR2", "TSR3", "TSR4", "Other"],
-        "TaylorMade": ["Qi35", "Qi35 Max", "Qi35 LS", "Qi35 Max Lite", "Qi10", "Qi10 LS", "Other"],
-        "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Elyte Triple Diamond Max", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Other"],
-        "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G440 K", "G430 MAX 10K", "G430 LST", "Other"],
-        "Mizuno": ["ST-G 440", "ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "Other"],
-        "Srixon": ["ZXi", "ZXi LS", "ZXi MAX", "ZX5 LS Mk II", "ZX5", "ZX7 Mk II", "Other"],
-        "Cleveland": ["Other"],
-        "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX-K", "DS-ADAPT MAX-D", "DARKSPEED X", "DARKSPEED LS", "Other"],
-        "PXG": ["Black Ops", "Black Ops Tour-1", "Black Ops Ultra-Lite", "0311 GEN6", "0311 XF GEN6", "0311 GEN5", "Other"],
-        "Wilson Staff": ["DYNAPWR LS", "DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR Carbon Lite", "DYNAPWR Max+", "DYNAPWR Max+ Lite", "Other"],
-        "Other": ["Other"],
-    }
-    
-    FAIRWAY_MODEL_OPTIONS = {
-        "Titleist": ["GT2", "GT3", "TSR2", "TSR3", "TSi2", "TSi3", "Other"],
-        "TaylorMade": ["Qi35", "Qi35 Max", "Qi10", "Qi10 Tour", "Stealth 2", "Stealth 2 Plus", "Other"],
-        "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Paradym Ai Smoke Max Fast", "Other"],
-        "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G430 MAX", "G430 LST", "G430 SFT", "Other"],
-        "Mizuno": ["ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "CLK", "Other"],
-        "Srixon": ["ZXi", "ZX Mk II", "ZX", "Z F85", "Z F65", "Z 785", "Other"],
-        "Cleveland": ["Launcher XL Halo", "Launcher HB Turbo", "Launcher HB", "Other"],
-        "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX", "DARKSPEED X", "DARKSPEED LS", "AEROJET", "Other"],
-        "PXG": ["Black Ops", "0311 Black Ops", "0311 XF GEN6", "0311 GEN6", "0211", "0341 X", "Other"],
-        "Wilson Staff": ["DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR", "Launch Pad 2", "Launch Pad", "Staff Model", "Other"],
-        "Other": ["Other"],
-    }
-    
-    HYBRID_MODEL_OPTIONS = {
-        "Titleist": ["GT2", "GT3", "TSR2", "TSR3", "TSi2", "TSi3", "Other"],
-        "TaylorMade": ["Qi35 Rescue", "Qi10 Rescue", "Stealth 2 Rescue", "SIM2 Rescue", "SIM DHY", "P·DHY", "Other"],
-        "Callaway": ["Elyte", "Elyte X", "Paradym Ai Smoke", "Paradym Ai Smoke HL", "Apex UW", "Super Hybrid", "Other"],
-        "PING": ["G440", "G430", "G430 HL", "G425", "iCrossover", "G Le3", "Other"],
-        "Mizuno": ["CLK", "ST-MAX 230", "ST-X 230", "JPX Fli-Hi", "Pro Fli-Hi", "ST-Z 230", "Other"],
-        "Srixon": ["ZXi", "ZX Mk II", "ZX", "ZU85", "ZU65", "Z H85", "Other"],
-        "Cleveland": ["Halo XL", "Launcher XL Halo", "Halo", "Launcher HB Turbo", "Launcher HB", "Other"],
-        "Cobra": ["DS-ADAPT", "DARKSPEED", "AEROJET", "KING TEC", "KING TEC One", "LTDx", "Other"],
-        "PXG": ["Black Ops", "0311 Black Ops", "0311 XF GEN6", "0311 GEN6", "0211", "0317 X", "Other"],
-        "Wilson Staff": ["DYNAPWR", "Launch Pad 2", "Launch Pad", "Staff Model Utility", "D9", "C300", "Other"],
-        "Other": ["Other"],
-    }
+TOP_BRANDS = [
+    "Titleist",
+    "TaylorMade",
+    "Callaway",
+    "PING",
+    "Mizuno",
+    "Srixon",
+    "Cleveland",
+    "Cobra",
+    "PXG",
+    "Wilson Staff",
+    "Other",
+]
 
+DRIVER_MODEL_OPTIONS = {
+    "Titleist": ["GT2", "GT3", "GT4", "TSR2", "TSR3", "TSR4", "Other"],
+    "TaylorMade": ["Qi35", "Qi35 Max", "Qi35 LS", "Qi35 Max Lite", "Qi10", "Qi10 LS", "Other"],
+    "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Elyte Triple Diamond Max", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Other"],
+    "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G440 K", "G430 MAX 10K", "G430 LST", "Other"],
+    "Mizuno": ["ST-G 440", "ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "Other"],
+    "Srixon": ["ZXi", "ZXi LS", "ZXi MAX", "ZX5 LS Mk II", "ZX5", "ZX7 Mk II", "Other"],
+    "Cleveland": ["Other"],
+    "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX-K", "DS-ADAPT MAX-D", "DARKSPEED X", "DARKSPEED LS", "Other"],
+    "PXG": ["Black Ops", "Black Ops Tour-1", "Black Ops Ultra-Lite", "0311 GEN6", "0311 XF GEN6", "0311 GEN5", "Other"],
+    "Wilson Staff": ["DYNAPWR LS", "DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR Carbon Lite", "DYNAPWR Max+", "DYNAPWR Max+ Lite", "Other"],
+    "Other": ["Other"],
+}
+
+FAIRWAY_MODEL_OPTIONS = {
+    "Titleist": ["GT2", "GT3", "TSR2", "TSR3", "TSi2", "TSi3", "Other"],
+    "TaylorMade": ["Qi35", "Qi35 Max", "Qi10", "Qi10 Tour", "Stealth 2", "Stealth 2 Plus", "Other"],
+    "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Paradym Ai Smoke Max Fast", "Other"],
+    "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G430 MAX", "G430 LST", "G430 SFT", "Other"],
+    "Mizuno": ["ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "CLK", "Other"],
+    "Srixon": ["ZXi", "ZX Mk II", "ZX", "Z F85", "Z F65", "Z 785", "Other"],
+    "Cleveland": ["Launcher XL Halo", "Launcher HB Turbo", "Launcher HB", "Other"],
+    "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX", "DARKSPEED X", "DARKSPEED LS", "AEROJET", "Other"],
+    "PXG": ["Black Ops", "0311 Black Ops", "0311 XF GEN6", "0311 GEN6", "0211", "0341 X", "Other"],
+    "Wilson Staff": ["DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR", "Launch Pad 2", "Launch Pad", "Staff Model", "Other"],
+    "Other": ["Other"],
+}
+
+HYBRID_MODEL_OPTIONS = {
+    "Titleist": ["GT2", "GT3", "TSR2", "TSR3", "TSi2", "TSi3", "Other"],
+    "TaylorMade": ["Qi35 Rescue", "Qi10 Rescue", "Stealth 2 Rescue", "SIM2 Rescue", "SIM DHY", "P·DHY", "Other"],
+    "Callaway": ["Elyte", "Elyte X", "Paradym Ai Smoke", "Paradym Ai Smoke HL", "Apex UW", "Super Hybrid", "Other"],
+    "PING": ["G440", "G430", "G430 HL", "G425", "iCrossover", "G Le3", "Other"],
+    "Mizuno": ["CLK", "ST-MAX 230", "ST-X 230", "JPX Fli-Hi", "Pro Fli-Hi", "ST-Z 230", "Other"],
+    "Srixon": ["ZXi", "ZX Mk II", "ZX", "ZU85", "ZU65", "Z H85", "Other"],
+    "Cleveland": ["Halo XL", "Launcher XL Halo", "Halo", "Launcher HB Turbo", "Launcher HB", "Other"],
+    "Cobra": ["DS-ADAPT", "DARKSPEED", "AEROJET", "KING TEC", "KING TEC One", "LTDx", "Other"],
+    "PXG": ["Black Ops", "0311 Black Ops", "0311 XF GEN6", "0311 GEN6", "0211", "0317 X", "Other"],
+    "Wilson Staff": ["DYNAPWR", "Launch Pad 2", "Launch Pad", "Staff Model Utility", "D9", "C300", "Other"],
+    "Other": ["Other"],
+}
 def _render_driver_setup(prefix: str, title: str):
     st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
 

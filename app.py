@@ -20,6 +20,7 @@ from hosel_db import (
 from fit_engine import (
     DriverUserSetup,
     build_driver_recommendations,
+    build_non_driver_recommendations,
     canonicalize,
     club_family,
     compare_driver_setups,

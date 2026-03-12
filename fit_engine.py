@@ -466,7 +466,7 @@ def summarize_by_club(canon_df: pd.DataFrame) -> Dict[str, ClubSummary]:
 
 
 # -----------------------------
-# Driver fitting / compare mode
+# Recommendation dataclasses
 # -----------------------------
 @dataclass
 class DriverUserSetup:
@@ -484,7 +484,7 @@ class RecommendationBlock:
     title: str
     suggestion: str
     why: str
-    tone: str  # green / yellow / red
+    tone: str
 
 
 @dataclass
@@ -511,6 +511,9 @@ class DriverCompareMetrics:
     fairway_pct: float
 
 
+# -----------------------------
+# Compare helpers
+# -----------------------------
 def driver_metrics_from_df(driver_df: pd.DataFrame, label: str) -> DriverCompareMetrics:
     d = driver_df.copy()
     if d.empty:
@@ -603,6 +606,9 @@ def compare_driver_setups(a_df: pd.DataFrame, b_df: pd.DataFrame, label_a: str =
     }
 
 
+# -----------------------------
+# Driver recommendation engine
+# -----------------------------
 def build_driver_recommendations(
     summary: ClubSummary,
     user_setup: DriverUserSetup,
@@ -621,7 +627,6 @@ def build_driver_recommendations(
     low_smash = not np.isnan(summary.smash_avg) and summary.smash_avg < 1.45
     light_shaft = user_setup.shaft_weight_g <= 55
 
-    # Swing
     if negative_aoa and low_launch:
         swing = RecommendationBlock(
             title="Swing",
@@ -651,7 +656,6 @@ def build_driver_recommendations(
             tone="green",
         )
 
-    # Driver Settings
     if low_launch:
         if user_setup.brand.lower() == "titleist":
             settings_text = f"Try adding loft in the hosel before changing flex. Example: test {user_setup.hosel_setting} against A2."
@@ -685,7 +689,6 @@ def build_driver_recommendations(
             tone="green",
         )
 
-    # Equipment
     equipment_lines: List[str] = []
     tone = "green"
 
@@ -717,7 +720,6 @@ def build_driver_recommendations(
 
     if low_launch and right_miss and playable_spin:
         equipment_lines.append("Avoid moving stiffer first if launch is already low and the miss is right.")
-        tone = "red" if "6.5" in " ".join(equipment_lines) else tone
 
     equipment_adjustment = RecommendationBlock(
         title="Equipment Adjustment",
@@ -740,5 +742,169 @@ def build_driver_recommendations(
             "spin": summary.spin_avg,
             "aoa": summary.aoa_avg,
             "fairway_hit_pct": fairway_hit_pct if fairway_hit_pct is not None else math.nan,
+        },
+    )
+
+
+# -----------------------------
+# Fairway / Hybrid recommendation engine
+# -----------------------------
+def build_non_driver_recommendations(
+    summary: ClubSummary,
+    stated_loft_deg: Optional[float] = None,
+    brand: Optional[str] = None,
+    model: Optional[str] = None,
+    shaft_model: Optional[str] = None,
+    shaft_weight_g: Optional[float] = None,
+    shaft_flex: Optional[str] = None,
+    hosel_setting: Optional[str] = None,
+) -> DriverRecommendationBundle:
+    club_id = summary.club_id
+    family = club_family(club_id)
+
+    launch_lo, launch_hi = targets_for_club(club_id, summary.club_speed_avg)["launch"]
+    spin_lo, spin_hi = targets_for_club(club_id, summary.club_speed_avg)["spin"]
+
+    low_launch = not np.isnan(summary.vla_avg) and summary.vla_avg < launch_lo
+    high_launch = not np.isnan(summary.vla_avg) and summary.vla_avg > launch_hi
+    low_spin = not np.isnan(summary.spin_avg) and summary.spin_avg < spin_lo
+    high_spin = not np.isnan(summary.spin_avg) and summary.spin_avg > spin_hi
+    right_miss = not np.isnan(summary.offline_avg) and summary.offline_avg > 5
+    left_miss = not np.isnan(summary.offline_avg) and summary.offline_avg < -5
+    negative_aoa = not np.isnan(summary.aoa_avg) and summary.aoa_avg < 0
+    wide_dispersion = not np.isnan(summary.offline_std) and summary.offline_std >= 16
+    low_smash = not np.isnan(summary.smash_avg) and summary.smash_avg < 1.42
+
+    if low_launch and negative_aoa:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Keep the ball slightly farther forward and make one shallow sweeping move through impact.",
+            why=f"This {family.lower()} appears to need more launch, and a steeper hit usually works against that.",
+            tone="green",
+        )
+    elif right_miss:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Focus on one feel only: let the face close a touch earlier through impact.",
+            why=f"Your {family.lower()} pattern trends right, so face control is the simplest first change.",
+            tone="yellow",
+        )
+    elif low_smash:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Prioritize centered strike over extra speed with this club.",
+            why=f"This {family.lower()} is likely losing ball speed from strike quality more than from raw speed.",
+            tone="yellow",
+        )
+    else:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Keep the motion stable and focus on repeating strike location.",
+            why=f"This {family.lower()} looks more likely to improve through consistency than through a major motion change.",
+            tone="green",
+        )
+
+    if low_launch:
+        if hosel_setting:
+            settings_text = f"Test a slightly higher-loft setting from {hosel_setting} before changing shaft stiffness."
+        else:
+            settings_text = "Test a slightly higher-loft setting before changing shaft stiffness."
+        settings = RecommendationBlock(
+            title="Club Settings",
+            suggestion=settings_text,
+            why=f"Launch is below the target window for this {family.lower()}, so loft is the cleanest first adjustment.",
+            tone="green",
+        )
+    elif right_miss:
+        if hosel_setting:
+            settings_text = f"Test a slightly more upright or draw-help setting from {hosel_setting}."
+        else:
+            settings_text = "Test a slightly more upright or draw-help setting."
+        settings = RecommendationBlock(
+            title="Club Settings",
+            suggestion=settings_text,
+            why=f"Your miss pattern trends right, so start-line and face presentation are worth adjusting first.",
+            tone="yellow",
+        )
+    elif high_launch and high_spin:
+        if hosel_setting:
+            settings_text = f"Test a slightly lower-loft setting from {hosel_setting}."
+        else:
+            settings_text = "Test a slightly lower-loft setting."
+        settings = RecommendationBlock(
+            title="Club Settings",
+            suggestion=settings_text,
+            why=f"Launch and spin are both above the target window for this {family.lower()}.",
+            tone="yellow",
+        )
+    else:
+        settings = RecommendationBlock(
+            title="Club Settings",
+            suggestion=f"Keep the current setting{f' ({hosel_setting})' if hosel_setting else ''} for now.",
+            why=f"This {family.lower()} does not strongly demand a settings change before strike and gapping are confirmed.",
+            tone="green",
+        )
+
+    equipment_lines: List[str] = []
+    tone = "green"
+
+    if family == "Fairway Wood":
+        if low_launch and (low_spin or not high_spin):
+            equipment_lines.append("Consider more loft or a more launch-friendly fairway wood setup before testing a stiffer shaft.")
+            tone = "green"
+        if wide_dispersion:
+            equipment_lines.append("A more forgiving fairway wood head may help on slight strike misses.")
+            tone = "yellow"
+        if right_miss and shaft_weight_g is not None and shaft_weight_g < 70:
+            equipment_lines.append("A slightly heavier fairway shaft in the same flex may improve tempo and face control.")
+            tone = "green"
+        elif right_miss:
+            equipment_lines.append("Test a smoother or more neutral shaft profile before moving stiffer.")
+            tone = "yellow"
+        if high_spin and not low_launch:
+            equipment_lines.append("If the ball flight climbs too much, test a slightly lower-spin profile only after launch stays playable.")
+            tone = "yellow"
+
+    elif family == "Hybrid":
+        if low_launch:
+            equipment_lines.append("Consider a little more loft or a more launch-friendly hybrid setup before changing flex.")
+            tone = "green"
+        if right_miss:
+            equipment_lines.append("If this hybrid leaks right, test a slightly more upright setting or a profile that is easier to square.")
+            tone = "yellow"
+        if left_miss:
+            equipment_lines.append("If this hybrid turns over too much, keep the shaft profile stable and test a more neutral setting first.")
+            tone = "yellow"
+        if wide_dispersion:
+            equipment_lines.append("A more forgiving hybrid head or slightly heavier shaft may help control start line.")
+            tone = "yellow"
+        if high_spin and high_launch:
+            equipment_lines.append("If trajectory is too floaty, test a slightly flatter or lower-spin setup after strike quality is confirmed.")
+            tone = "yellow"
+
+    if not equipment_lines:
+        equipment_lines.append("Current equipment category looks reasonable; confirm gapping and strike consistency before making a bigger change.")
+        tone = "green"
+
+    equipment = RecommendationBlock(
+        title="Equipment Adjustment",
+        suggestion=" ".join(equipment_lines),
+        why=f"This recommendation prioritizes launch window, miss tendency, and forgiveness for your {family.lower()}.",
+        tone=tone,
+    )
+
+    return DriverRecommendationBundle(
+        swing=swing,
+        driver_settings=settings,
+        equipment_adjustment=equipment,
+        debug={
+            "club_speed": summary.club_speed_avg,
+            "ball_speed": summary.ball_speed_avg,
+            "smash": summary.smash_avg,
+            "carry": summary.carry_avg,
+            "offline_avg": summary.offline_avg,
+            "launch": summary.vla_avg,
+            "spin": summary.spin_avg,
+            "aoa": summary.aoa_avg,
         },
     )

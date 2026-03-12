@@ -488,7 +488,7 @@ class RecommendationBlock:
 
 
 @dataclass
-class DriverRecommendationBundle:
+class RecommendationBundle:
     swing: RecommendationBlock
     driver_settings: RecommendationBlock
     equipment_adjustment: RecommendationBlock
@@ -613,7 +613,7 @@ def build_driver_recommendations(
     summary: ClubSummary,
     user_setup: DriverUserSetup,
     fairway_hit_pct: Optional[float] = None,
-) -> DriverRecommendationBundle:
+) -> RecommendationBundle:
     launch_lo, launch_hi = targets_for_club("DR", summary.club_speed_avg)["launch"]
     spin_lo, spin_hi = targets_for_club("DR", summary.club_speed_avg)["spin"]
 
@@ -728,7 +728,7 @@ def build_driver_recommendations(
         tone=tone,
     )
 
-    return DriverRecommendationBundle(
+    return RecommendationBundle(
         swing=swing,
         driver_settings=driver_settings,
         equipment_adjustment=equipment_adjustment,
@@ -758,7 +758,7 @@ def build_non_driver_recommendations(
     shaft_weight_g: Optional[float] = None,
     shaft_flex: Optional[str] = None,
     hosel_setting: Optional[str] = None,
-) -> DriverRecommendationBundle:
+) -> RecommendationBundle:
     club_id = summary.club_id
     family = club_family(club_id)
 
@@ -893,7 +893,7 @@ def build_non_driver_recommendations(
         tone=tone,
     )
 
-    return DriverRecommendationBundle(
+    return RecommendationBundle(
         swing=swing,
         driver_settings=settings,
         equipment_adjustment=equipment,

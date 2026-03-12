@@ -1,6 +1,6 @@
-# fit_engine.py
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -85,51 +85,29 @@ def safe_std(x: pd.Series) -> float:
 
 
 # -----------------------------
-# Club normalization (NEW)
+# Club normalization
 # -----------------------------
-_CLUB_PATTERNS = [
-    ("DR", [r"\bDR\b", r"\bDRIVER\b", r"^D$"]),
-    ("2W", [r"\b2W\b", r"\b2\s*WOOD\b"]),
-    ("3W", [r"\b3W\b", r"\b3\s*WOOD\b"]),
-    ("4W", [r"\b4W\b", r"\b4\s*WOOD\b"]),
-    ("5W", [r"\b5W\b", r"\b5\s*WOOD\b"]),
-    ("7W", [r"\b7W\b", r"\b7\s*WOOD\b"]),
-    ("9W", [r"\b9W\b", r"\b9\s*WOOD\b"]),
-    ("2H", [r"\b2H\b", r"\bH2\b", r"\b2\s*HY\b", r"\b2\s*HYBRID\b"]),
-    ("3H", [r"\b3H\b", r"\bH3\b", r"\b3\s*HY\b", r"\b3\s*HYBRID\b"]),
-    ("4H", [r"\b4H\b", r"\bH4\b", r"\b4\s*HY\b", r"\b4\s*HYBRID\b"]),
-    ("5H", [r"\b5H\b", r"\bH5\b", r"\b5\s*HY\b", r"\b5\s*HYBRID\b"]),
-    ("6H", [r"\b6H\b", r"\bH6\b", r"\b6\s*HY\b", r"\b6\s*HYBRID\b"]),
-    ("7H", [r"\b7H\b", r"\bH7\b", r"\b7\s*HY\b", r"\b7\s*HYBRID\b"]),
-]
-
 def normalize_club_label(label: str) -> str:
     if not isinstance(label, str):
         return "OTHER"
 
     s = label.strip().upper()
 
-    # Driver
     if s == "DR":
         return "DR"
 
-    # Woods
     if s.startswith("W") and len(s) == 2:
         return f"{s[1]}W"
 
-    # Hybrids
     if s.startswith("H") and len(s) == 2:
         return f"{s[1]}H"
 
-    # Irons
     if s.startswith("I") and len(s) == 2:
         return f"{s[1]}I"
 
-    # Wedges
     if s in ["PW", "GW", "SW", "LW"]:
         return s
 
-    # Putter
     if s == "PT":
         return "PT"
 
@@ -169,6 +147,7 @@ CANON = [
     "face_to_path_deg",
     "face_to_target_deg",
 ]
+
 
 def detect_format(columns: List[str]) -> str:
     cols = set(columns)
@@ -214,7 +193,7 @@ def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
         out["total_yd"] = pd.to_numeric(df.get("TotalDistance"), errors="coerce")
         out["offline_yd"] = pd.to_numeric(df.get("Offline"), errors="coerce")
         out["peak_height_yd"] = pd.to_numeric(df.get("PeakHeight"), errors="coerce")
-        out["descent_deg"] = pd.to_numeric(df.get("Decent"), errors="coerce")  # yes "Decent"
+        out["descent_deg"] = pd.to_numeric(df.get("Decent"), errors="coerce")
         out["hla_deg"] = pd.to_numeric(df.get("HLA"), errors="coerce")
         out["vla_deg"] = pd.to_numeric(df.get("VLA"), errors="coerce")
         out["backspin_rpm"] = pd.to_numeric(df.get("BackSpin"), errors="coerce")
@@ -235,13 +214,32 @@ def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
             out["smash"] = (out["ball_speed_mph"] / out["club_speed_mph"]).replace([np.inf, -np.inf], np.nan)
 
     else:
-        # best effort
         out["club_raw"] = df.get("Club", df.get("Club Name", np.nan))
         out["club_speed_mph"] = pd.to_numeric(df.get("ClubSpeed", df.get("Club Speed (mph)")), errors="coerce")
         out["ball_speed_mph"] = pd.to_numeric(df.get("BallSpeed", df.get("Ball Speed (mph)")), errors="coerce")
         out["carry_yd"] = pd.to_numeric(df.get("Carry", df.get("Carry Dist (yd)")), errors="coerce")
         out["total_yd"] = pd.to_numeric(df.get("TotalDistance", df.get("Total Dist (yd)")), errors="coerce")
         out["offline_yd"] = df.get("Offline", df.get("Offline (yd)")).apply(parse_dir_value)
+        out["peak_height_yd"] = pd.to_numeric(df.get("PeakHeight", df.get("Peak Height (yd)")), errors="coerce")
+        out["descent_deg"] = df.get("Decent", df.get("Desc Angle", np.nan)).apply(parse_dir_value)
+        out["hla_deg"] = df.get("HLA", np.nan).apply(parse_dir_value) if "HLA" in df.columns else np.nan
+        out["vla_deg"] = df.get("VLA", np.nan).apply(parse_dir_value) if "VLA" in df.columns else np.nan
+        out["backspin_rpm"] = pd.to_numeric(df.get("BackSpin", df.get("Back Spin")), errors="coerce")
+        out["spin_axis_deg"] = df.get("Spin Axis", df.get("rawSpinAxis", df.get("SideSpin", np.nan)))
+        if isinstance(out["spin_axis_deg"], pd.Series):
+            out["spin_axis_deg"] = out["spin_axis_deg"].apply(parse_dir_value)
+        out["aoa_deg"] = df.get("AoA", df.get("Club AoA", np.nan))
+        if isinstance(out["aoa_deg"], pd.Series):
+            out["aoa_deg"] = out["aoa_deg"].apply(parse_dir_value)
+        out["club_path_deg"] = df.get("Path", df.get("Club Path", np.nan))
+        if isinstance(out["club_path_deg"], pd.Series):
+            out["club_path_deg"] = out["club_path_deg"].apply(parse_dir_value)
+        out["face_to_path_deg"] = df.get("FaceToPath", df.get("Face to Path", np.nan))
+        if isinstance(out["face_to_path_deg"], pd.Series):
+            out["face_to_path_deg"] = out["face_to_path_deg"].apply(parse_dir_value)
+        out["face_to_target_deg"] = df.get("FaceToTarget", df.get("Face to Target", np.nan))
+        if isinstance(out["face_to_target_deg"], pd.Series):
+            out["face_to_target_deg"] = out["face_to_target_deg"].apply(parse_dir_value)
         out["smash"] = (out["ball_speed_mph"] / out["club_speed_mph"]).replace([np.inf, -np.inf], np.nan)
 
     out["club_id"] = out["club_raw"].apply(normalize_club_label)
@@ -249,13 +247,9 @@ def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
 
 
 # -----------------------------
-# Targets (club-specific)
+# Targets
 # -----------------------------
 def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[float, float]]:
-    """
-    Practical MVP target windows per club. These are intentionally broad.
-    Driver uses speed-adjusted windows; fairway/hybrids use fixed windows.
-    """
     fam = club_family(club_id)
 
     if fam == "DR":
@@ -270,7 +264,6 @@ def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[flo
             return {"launch": (11.0, 14.0), "spin": (2000.0, 2900.0)}
         return {"launch": (10.0, 13.0), "spin": (1800.0, 2700.0)}
 
-    # Fairway woods (broad windows by loft class)
     if fam == "FW":
         if club_id in {"2W", "3W"}:
             return {"launch": (11.0, 15.0), "spin": (2800.0, 3800.0)}
@@ -278,7 +271,6 @@ def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[flo
             return {"launch": (13.0, 17.0), "spin": (3200.0, 4500.0)}
         return {"launch": (14.0, 19.0), "spin": (3800.0, 5200.0)}
 
-    # Hybrids (broad)
     if fam == "HY":
         if club_id in {"2H", "3H"}:
             return {"launch": (13.0, 18.0), "spin": (3500.0, 5200.0)}
@@ -290,9 +282,10 @@ def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[flo
 
 
 # -----------------------------
-# Hosel change estimate (NEW)
+# Hosel change estimate
 # -----------------------------
 LAUNCH_FROM_DYNAMIC_WEIGHT = 0.85
+
 
 @dataclass(frozen=True)
 class LaunchSpinEstimate:
@@ -302,6 +295,7 @@ class LaunchSpinEstimate:
     spin_range_rpm: Tuple[int, int]
     notes: str
 
+
 def estimate_launch_spin_change(delta_static_loft_deg: float, k_loft_to_dynamic: float, club_id: str) -> LaunchSpinEstimate:
     fam = club_family(club_id)
 
@@ -310,7 +304,6 @@ def estimate_launch_spin_change(delta_static_loft_deg: float, k_loft_to_dynamic:
     launch_low = launch_est - launch_unc
     launch_high = launch_est + launch_unc
 
-    # conservative spin bands (rpm per 1° loft)
     if fam == "DR":
         center, lo, hi = 250, 150, 400
     elif fam == "FW":
@@ -335,7 +328,7 @@ def estimate_launch_spin_change(delta_static_loft_deg: float, k_loft_to_dynamic:
 
 
 # -----------------------------
-# One-setting hosel recommendation (NEW)
+# Recommendation helpers
 # -----------------------------
 def miss_tendency(offline_avg: float) -> str:
     if np.isnan(offline_avg):
@@ -367,12 +360,6 @@ def pick_one_hosel_setting(
     needed_loft_delta: float,
     needed_lie_delta: float,
 ) -> Dict[str, object]:
-    """
-    Returns ONE recommended hosel setting if exact deltas exist.
-    Adds a strong penalty if the setting moves loft in the opposite direction
-    of the required loft change (prevents 'lower loft' recommendations when
-    launch is too low, and vice-versa).
-    """
     scored = []
 
     for s in settings:
@@ -382,11 +369,8 @@ def pick_one_hosel_setting(
         if loft is None or lie is None:
             continue
 
-        # Base distance-to-goal score
         score = abs(loft - needed_loft_delta) * 1.5 + abs(lie - needed_lie_delta) * 1.0
 
-        # Directional guardrail for loft
-        # If we need more loft, strongly avoid negative loft settings (and vice versa)
         if needed_loft_delta > 0.25 and loft < -0.01:
             score += 100.0
         if needed_loft_delta < -0.25 and loft > 0.01:
@@ -419,7 +403,7 @@ def pick_one_hosel_setting(
 
 
 # -----------------------------
-# Aggregation per club (NEW)
+# Aggregation
 # -----------------------------
 @dataclass(frozen=True)
 class ClubSummary:
@@ -469,3 +453,266 @@ def summarize_by_club(canon_df: pd.DataFrame) -> Dict[str, ClubSummary]:
             aoa_std=safe_std(g["aoa_deg"]),
         )
     return summaries
+
+
+# -----------------------------
+# Driver fitting / comparison
+# -----------------------------
+@dataclass
+class DriverUserSetup:
+    brand: str = "Titleist"
+    model: str = "TSR3"
+    loft_deg: float = 10.0
+    hosel_setting: str = "A1"
+    shaft_model: str = "HZRDUS Black"
+    shaft_weight_g: float = 60.0
+    shaft_flex: str = "6.0"
+
+
+@dataclass
+class RecommendationBlock:
+    title: str
+    suggestion: str
+    why: str
+
+
+@dataclass
+class DriverRecommendationBundle:
+    swing: RecommendationBlock
+    driver_settings: RecommendationBlock
+    equipment_adjustment: RecommendationBlock
+    debug: Dict[str, float]
+
+
+@dataclass
+class DriverCompareMetrics:
+    label: str
+    shots: int
+    club_speed: float
+    ball_speed: float
+    smash: float
+    carry: float
+    total: float
+    launch: float
+    spin: float
+    aoa: float
+    offline: float
+    fairway_pct: float
+
+
+def _fmt_num(value: float, decimals: int = 1) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "—"
+    return f"{value:.{decimals}f}"
+
+
+def driver_metrics_from_df(driver_df: pd.DataFrame, label: str) -> DriverCompareMetrics:
+    d = driver_df.copy()
+    if d.empty:
+        return DriverCompareMetrics(label, 0, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan, math.nan)
+
+    offline_valid = pd.to_numeric(d["offline_yd"], errors="coerce").dropna()
+    fairway_pct = float((offline_valid.abs() <= 15).mean() * 100.0) if len(offline_valid) else math.nan
+
+    return DriverCompareMetrics(
+        label=label,
+        shots=int(len(d)),
+        club_speed=safe_mean(d["club_speed_mph"]),
+        ball_speed=safe_mean(d["ball_speed_mph"]),
+        smash=safe_mean(d["smash"]),
+        carry=safe_mean(d["carry_yd"]),
+        total=safe_mean(d["total_yd"]),
+        launch=safe_mean(d["vla_deg"]),
+        spin=safe_mean(d["backspin_rpm"]),
+        aoa=safe_mean(d["aoa_deg"]),
+        offline=safe_mean(d["offline_yd"].abs()),
+        fairway_pct=fairway_pct,
+    )
+
+
+def compare_driver_setups(a_df: pd.DataFrame, b_df: pd.DataFrame, label_a: str = "Setup A", label_b: str = "Setup B") -> Dict[str, object]:
+    a = driver_metrics_from_df(a_df, label_a)
+    b = driver_metrics_from_df(b_df, label_b)
+
+    def better_high(x: float, y: float) -> str:
+        if np.isnan(x) and np.isnan(y):
+            return "Tie"
+        if np.isnan(y):
+            return label_a
+        if np.isnan(x):
+            return label_b
+        if abs(x - y) < 1e-9:
+            return "Tie"
+        return label_a if x > y else label_b
+
+    def better_low(x: float, y: float) -> str:
+        if np.isnan(x) and np.isnan(y):
+            return "Tie"
+        if np.isnan(y):
+            return label_a
+        if np.isnan(x):
+            return label_b
+        if abs(x - y) < 1e-9:
+            return "Tie"
+        return label_a if x < y else label_b
+
+    score_a = 0
+    score_b = 0
+
+    # Carry
+    if better_high(a.carry, b.carry) == label_a:
+        score_a += 1
+    elif better_high(a.carry, b.carry) == label_b:
+        score_b += 1
+
+    # Ball speed
+    if better_high(a.ball_speed, b.ball_speed) == label_a:
+        score_a += 1
+    elif better_high(a.ball_speed, b.ball_speed) == label_b:
+        score_b += 1
+
+    # Dispersion
+    if better_low(a.offline, b.offline) == label_a:
+        score_a += 1
+    elif better_low(a.offline, b.offline) == label_b:
+        score_b += 1
+
+    # Fairways
+    if better_high(a.fairway_pct, b.fairway_pct) == label_a:
+        score_a += 1
+    elif better_high(a.fairway_pct, b.fairway_pct) == label_b:
+        score_b += 1
+
+    overall = "Tie"
+    if score_a > score_b:
+        overall = label_a
+    elif score_b > score_a:
+        overall = label_b
+
+    return {
+        "a": a,
+        "b": b,
+        "winners": {
+            "longest_carry": better_high(a.carry, b.carry),
+            "fastest_ball_speed": better_high(a.ball_speed, b.ball_speed),
+            "straightest": better_low(a.offline, b.offline),
+            "most_fairways": better_high(a.fairway_pct, b.fairway_pct),
+            "best_overall": overall,
+        },
+    }
+
+
+def build_driver_recommendations(
+    summary: ClubSummary,
+    user_setup: DriverUserSetup,
+    fairway_hit_pct: Optional[float] = None,
+) -> DriverRecommendationBundle:
+    launch_lo, launch_hi = targets_for_club("DR", summary.club_speed_avg)["launch"]
+    spin_lo, spin_hi = targets_for_club("DR", summary.club_speed_avg)["spin"]
+
+    low_launch = not np.isnan(summary.vla_avg) and summary.vla_avg < launch_lo
+    very_low_launch = not np.isnan(summary.vla_avg) and summary.vla_avg < 9.5
+    high_launch = not np.isnan(summary.vla_avg) and summary.vla_avg > launch_hi
+    playable_spin = not np.isnan(summary.spin_avg) and spin_lo <= summary.spin_avg <= spin_hi
+    high_spin = not np.isnan(summary.spin_avg) and summary.spin_avg > spin_hi
+    right_miss = not np.isnan(summary.offline_avg) and summary.offline_avg > 5
+    left_miss = not np.isnan(summary.offline_avg) and summary.offline_avg < -5
+    negative_aoa = not np.isnan(summary.aoa_avg) and summary.aoa_avg < 0
+    wide_dispersion = not np.isnan(summary.offline_std) and summary.offline_std >= 18
+    low_smash = not np.isnan(summary.smash_avg) and summary.smash_avg < 1.45
+    light_shaft = user_setup.shaft_weight_g <= 55
+
+    # Swing recommendation: just one change
+    if negative_aoa and low_launch:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Move the ball a touch farther forward and feel one small upward strike through impact.",
+            why="Your attack angle and launch window suggest you are giving away carry distance."
+        )
+    elif right_miss:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Use one simple feel only: square the face a little earlier through impact.",
+            why="Your data trends right often enough that face control matters more than a major swing rebuild."
+        )
+    elif low_smash:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Prioritize centered strike over extra speed on your next session.",
+            why="Better strike quality should improve both ball speed and dispersion."
+        )
+    else:
+        swing = RecommendationBlock(
+            title="Swing",
+            suggestion="Keep the swing thought simple and repeatable: same tee height, same ball position, same tempo.",
+            why="Your next gains are more likely to come from consistency than from a major motion change."
+        )
+
+    # Driver settings recommendation
+    if low_launch:
+        if user_setup.brand.lower() == "titleist":
+            settings_text = f"Try adding loft in the SureFit sleeve before changing flex. Example: test {user_setup.hosel_setting} against a higher-loft setting such as A2."
+        else:
+            settings_text = f"Add loft slightly from your current setting ({user_setup.hosel_setting}) before testing a stiffer shaft."
+        settings_why = "Your launch is below target, so a loft increase is usually safer than making the shaft play firmer."
+    elif right_miss:
+        settings_text = f"Test a slightly more upright / draw-help setting from {user_setup.hosel_setting} and compare dispersion."
+        settings_why = "Your miss pattern trends right, so a hosel tweak may help start line and face presentation."
+    elif high_launch and high_spin:
+        settings_text = f"Your current hosel setting is worth testing against a slightly lower-loft option from {user_setup.hosel_setting}."
+        settings_why = "Launch and spin are both elevated enough to justify a head-setting test."
+    else:
+        settings_text = f"Keep your current hosel setting ({user_setup.hosel_setting}) for now and confirm strike pattern first."
+        settings_why = "The current data does not strongly demand a hosel move before strike consistency is confirmed."
+
+    driver_settings = RecommendationBlock(
+        title="Driver Settings",
+        suggestion=settings_text,
+        why=settings_why,
+    )
+
+    # Equipment recommendation
+    equipment_bits: List[str] = []
+
+    if wide_dispersion or (fairway_hit_pct is not None and fairway_hit_pct < 60):
+        if user_setup.brand.lower() == "titleist" and user_setup.model.upper() == "TSR3":
+            equipment_bits.append("Consider a more forgiving head such as TSR2 if you want help on mishits.")
+        elif user_setup.brand.lower() == "ping" and "LST" in user_setup.model.upper():
+            equipment_bits.append("Consider moving from an LST head to a MAX-style head for more forgiveness.")
+        else:
+            equipment_bits.append("A more forgiving, higher-MOI head may help more than a stiffer shaft.")
+
+    if low_launch and right_miss and playable_spin:
+        if light_shaft:
+            equipment_bits.append("Test a heavier 60–65g shaft in the same flex before testing 6.5.")
+        else:
+            equipment_bits.append("Stay in the same flex first and test a different shaft profile before moving stiffer.")
+    elif light_shaft and (right_miss or wide_dispersion):
+        equipment_bits.append("A heavier shaft in the same flex may improve tempo and face control.")
+    elif high_spin and not low_launch and not right_miss and not np.isnan(summary.club_speed_avg) and summary.club_speed_avg >= 103:
+        equipment_bits.append("A stiffer or lower-spin shaft can be tested, but only after launch and strike stay stable.")
+    else:
+        equipment_bits.append("Current shaft category looks reasonable; profile testing matters more than jumping flex.")
+
+    equipment_adjustment = RecommendationBlock(
+        title="Equipment Adjustment",
+        suggestion=" ".join(equipment_bits),
+        why="This recommendation prioritizes launch, carry, forgiveness, and dispersion before stiffness.",
+    )
+
+    return DriverRecommendationBundle(
+        swing=swing,
+        driver_settings=driver_settings,
+        equipment_adjustment=equipment_adjustment,
+        debug={
+            "club_speed": summary.club_speed_avg,
+            "ball_speed": summary.ball_speed_avg,
+            "smash": summary.smash_avg,
+            "carry": summary.carry_avg,
+            "offline_avg": summary.offline_avg,
+            "launch": summary.vla_avg,
+            "spin": summary.spin_avg,
+            "aoa": summary.aoa_avg,
+            "fairway_hit_pct": fairway_hit_pct if fairway_hit_pct is not None else math.nan,
+        },
+    )

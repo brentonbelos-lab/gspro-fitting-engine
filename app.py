@@ -948,6 +948,8 @@ if analysis_mode == "Single Club Analysis":
 
     focus_summary = summaries[focus_club]
 
+    non_driver_build_cfg = None
+
     top1, top2 = st.columns([1.35, 1.0])
 
     with top1:

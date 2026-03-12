@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from viz import render_dispersion
+from viz import render_dispersion, render_compare_dispersion
 
 from hosel_db import (
     get_supported_brands,

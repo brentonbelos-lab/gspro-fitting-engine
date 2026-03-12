@@ -14,22 +14,19 @@ import streamlit as st
 # -----------------------------
 @dataclass
 class DispersionConfig:
-    distance_mode: str = "carry"          # "carry" or "total"
+    distance_mode: str = "carry"
     fairway_width_yd: float = 70.0
-    fairway_end_mode: str = "p95"         # "max" or "p95"
+    fairway_end_mode: str = "p95"
     right_miss_down: bool = True
 
-    # Padding
     x_pad_pct: float = 0.08
     y_pad_pct: float = 0.18
 
-    # Visual toggles
     show_centerline: bool = True
     show_target_marker: bool = True
     keep_proportions: bool = True
 
-    # Dispersion circle settings
-    circle_mode: str = "p90"              # "p80" | "p90" | "p95" | "1sigma" | "2sigma"
+    circle_mode: str = "p90"
     circle_min_radius_yd: float = 5.0
     circle_opacity: float = 0.18
 
@@ -83,10 +80,7 @@ def _circle_trace(cx: float, cy: float, radius: float, color: str, name: str, op
 
 def _empty_figure(message: str = "No plottable shots for dispersion map.") -> go.Figure:
     fig = go.Figure()
-    fig.add_annotation(
-        text=message,
-        x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False
-    )
+    fig.add_annotation(text=message, x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
     fig.update_layout(height=680, margin=dict(l=20, r=20, t=45, b=20))
     return fig
 
@@ -381,8 +375,8 @@ def _build_compare_dispersion_figure(
 
     _add_course_layers(fig, bounds, cfg)
 
-    color_a = "#2563eb"  # blue
-    color_b = "#f97316"  # orange
+    color_a = "#2563eb"
+    color_b = "#f97316"
 
     def add_setup_trace(d: pd.DataFrame, label: str, color: str):
         if d.empty:
@@ -462,56 +456,101 @@ def _build_compare_dispersion_figure(
 # -----------------------------
 # Public functions
 # -----------------------------
-def render_dispersion(canon_df: pd.DataFrame, key_prefix: str = "dispersion"):
+def render_dispersion(
+    canon_df: pd.DataFrame,
+    key_prefix: str = "dispersion",
+    lock_club: Optional[str] = None,
+):
     """
     Standard single-dataset dispersion chart with unique widget keys.
+    If lock_club is provided, the club selector is removed.
     """
     if canon_df is None or canon_df.empty:
         st.info("No shot data available.")
         return
 
-    c0, c1, c2, c3, c4 = st.columns([1.4, 1.2, 1.2, 1.2, 1.2])
+    if lock_club is None:
+        c0, c1, c2, c3, c4 = st.columns([1.4, 1.2, 1.2, 1.2, 1.2])
 
-    clubs = sorted([c for c in canon_df["club_id"].dropna().unique().tolist()])
+        clubs = sorted([c for c in canon_df["club_id"].dropna().unique().tolist()])
 
-    with c0:
-        club_filter = st.selectbox(
-            "Club",
-            ["ALL"] + clubs,
-            index=0,
-            key=f"{key_prefix}_club_filter",
-        )
+        with c0:
+            club_filter = st.selectbox(
+                "Club",
+                ["ALL"] + clubs,
+                index=0,
+                key=f"{key_prefix}_club_filter",
+            )
 
-    with c1:
-        distance_mode = st.selectbox(
-            "Distance",
-            ["carry", "total"],
-            index=0,
-            key=f"{key_prefix}_distance_mode",
-        )
+        with c1:
+            distance_mode = st.selectbox(
+                "Distance",
+                ["carry", "total"],
+                index=0,
+                key=f"{key_prefix}_distance_mode",
+            )
 
-    with c2:
-        fairway_width = st.slider(
-            "Fairway width (yd)",
-            30, 140, 70, 1,
-            key=f"{key_prefix}_fairway_width",
-        )
+        with c2:
+            fairway_width = st.slider(
+                "Fairway width (yd)",
+                30, 140, 70, 1,
+                key=f"{key_prefix}_fairway_width",
+            )
 
-    with c3:
-        end_mode = st.selectbox(
-            "Fairway length",
-            ["p95", "max"],
-            index=0,
-            key=f"{key_prefix}_end_mode",
-        )
+        with c3:
+            end_mode = st.selectbox(
+                "Fairway length",
+                ["p95", "max"],
+                index=0,
+                key=f"{key_prefix}_end_mode",
+            )
 
-    with c4:
-        circle_mode = st.selectbox(
-            "Dispersion circle",
-            ["p80", "p90", "p95", "1sigma", "2sigma"],
-            index=1,
-            key=f"{key_prefix}_circle_mode",
-        )
+        with c4:
+            circle_mode = st.selectbox(
+                "Dispersion circle",
+                ["p80", "p90", "p95", "1sigma", "2sigma"],
+                index=1,
+                key=f"{key_prefix}_circle_mode",
+            )
+
+        club = None if club_filter == "ALL" else club_filter
+
+    else:
+        c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 1.2])
+
+        with c1:
+            distance_mode = st.selectbox(
+                "Distance",
+                ["carry", "total"],
+                index=0,
+                key=f"{key_prefix}_distance_mode",
+            )
+
+        with c2:
+            fairway_width = st.slider(
+                "Fairway width (yd)",
+                30, 140, 70, 1,
+                key=f"{key_prefix}_fairway_width",
+            )
+
+        with c3:
+            end_mode = st.selectbox(
+                "Fairway length",
+                ["p95", "max"],
+                index=0,
+                key=f"{key_prefix}_end_mode",
+            )
+
+        with c4:
+            circle_mode = st.selectbox(
+                "Dispersion circle",
+                ["p80", "p90", "p95", "1sigma", "2sigma"],
+                index=1,
+                key=f"{key_prefix}_circle_mode",
+            )
+
+        club = lock_club
+        st.caption(f"Locked to club: {lock_club}")
 
     cfg = DispersionConfig(
         distance_mode=distance_mode,
@@ -521,9 +560,7 @@ def render_dispersion(canon_df: pd.DataFrame, key_prefix: str = "dispersion"):
         circle_mode=circle_mode,
     )
 
-    club = None if club_filter == "ALL" else club_filter
     fig, df_plot = _build_dispersion_figure(canon_df, cfg=cfg, club_filter=club)
-
     plot_key = f"{key_prefix}_plot"
 
     try:

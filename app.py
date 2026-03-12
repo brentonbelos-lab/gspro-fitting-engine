@@ -359,6 +359,27 @@ def _status_html(tone: str) -> str:
         return '<span class="fc-status fc-status-yellow">Test carefully</span>'
     return '<span class="fc-status fc-status-red">Avoid first</span>'
 
+def _render_non_driver_recommendations(
+    focus_summary,
+    hosel_configs: Dict[str, Dict],
+):
+    club_id = focus_summary.club_id
+    cfg = hosel_configs.get(club_id, {})
+
+    bundle = build_non_driver_recommendations(
+        summary=focus_summary,
+        stated_loft_deg=cfg.get("stated_loft"),
+        brand=cfg.get("brand"),
+        model=None,
+        shaft_model=None,
+        shaft_weight_g=None,
+        shaft_flex=None,
+        hosel_setting=cfg.get("current_setting"),
+    )
+
+    st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
+    _render_recommendation_cards(bundle)
+    
 
 def _render_recommendation_cards(bundle):
     for block in [bundle.swing, bundle.driver_settings, bundle.equipment_adjustment]:

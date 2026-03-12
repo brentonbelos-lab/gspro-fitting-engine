@@ -803,7 +803,7 @@ if analysis_mode == "Single Club Analysis":
             _render_driver_setup("single", "Driver Build")
             _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
 
-    hosel_title = f"Hosel / Loft Testing — {focus_club}"
+    hosel_title = f"Hosel Settings — {focus_club}"
 
     hosel_configs = _render_hosel_block(
         club_id=focus_club,

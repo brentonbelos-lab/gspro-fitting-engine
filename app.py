@@ -264,7 +264,19 @@ def _render_driver_setup(prefix: str, title: str):
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        brand_options = ["Titleist", "Ping", "Other"]
+        brand_options = [
+            "Titleist",
+            "TaylorMade",
+            "Callaway",
+            "PING",
+            "Mizuno",
+            "Srixon",
+            "Cleveland",
+            "Cobra",
+            "PXG",
+            "Wilson Staff",
+            "Other",
+        ]
         current_brand = st.session_state[f"{prefix}_driver_brand"]
         if current_brand not in brand_options:
             current_brand = "Other"

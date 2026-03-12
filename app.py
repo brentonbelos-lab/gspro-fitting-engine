@@ -792,7 +792,7 @@ if analysis_mode == "Single Club Analysis":
 
     with top1:
         st.markdown('<div class="fc-card"><h3>Dispersion</h3>', unsafe_allow_html=True)
-        render_dispersion(focus_df)
+        render_dispersion(focus_df, key_prefix="single_focus")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with top2:

@@ -842,6 +842,9 @@ if analysis_mode == "Single Club Analysis":
         k_loft_to_dynamic=k_loft_to_dynamic,
     )
 
+    if focus_club != "DR":
+        _render_non_driver_recommendations(focus_summary, hosel_configs)
+
     _render_advanced_analysis(
         club_id=focus_club,
         canon_df=focus_df,

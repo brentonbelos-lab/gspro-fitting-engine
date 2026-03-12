@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -21,6 +21,7 @@ from fit_engine import (
     DriverUserSetup,
     build_driver_recommendations,
     canonicalize,
+    club_family,
     compare_driver_setups,
     estimate_launch_spin_change,
     miss_tendency,
@@ -31,11 +32,128 @@ from fit_engine import (
 )
 
 # -----------------------------
-# Streamlit config
+# Page config
 # -----------------------------
-st.set_page_config(page_title="FitCaddie — Spec-Range MVP", layout="wide")
-st.title("FitCaddie — Spec-Range MVP")
-st.caption("Upload GSPro CSV data → analyze clubs → compare driver setups → get fitter-style recommendations.")
+st.set_page_config(page_title="FitCaddie", layout="wide")
+st.title("FitCaddie")
+st.caption("A cleaner fitter workflow: one club at a time, clearer next steps, easier setup testing.")
+
+
+# -----------------------------
+# Theme / Styling
+# -----------------------------
+st.markdown(
+    """
+    <style>
+    :root {
+        --fc-blue: #1f77d0;
+        --fc-blue-dark: #103e6e;
+        --fc-blue-soft: #eff6ff;
+        --fc-border: #d7e6f7;
+        --fc-text: #16324f;
+        --fc-green-bg: #edf9f1;
+        --fc-green-border: #87d4a1;
+        --fc-yellow-bg: #fff8e8;
+        --fc-yellow-border: #e8c96b;
+        --fc-red-bg: #fff1f1;
+        --fc-red-border: #e09a9a;
+        --fc-card-bg: #ffffff;
+        --fc-panel-bg: #f8fbff;
+    }
+
+    .fc-hero {
+        background: linear-gradient(135deg, #1f77d0 0%, #245f9c 100%);
+        color: white;
+        padding: 20px 24px;
+        border-radius: 18px;
+        margin-bottom: 16px;
+        box-shadow: 0 8px 24px rgba(16, 62, 110, 0.12);
+    }
+
+    .fc-card {
+        background: var(--fc-card-bg);
+        border: 1px solid var(--fc-border);
+        border-radius: 16px;
+        padding: 16px 18px;
+        box-shadow: 0 4px 16px rgba(31, 119, 208, 0.06);
+        margin-bottom: 14px;
+    }
+
+    .fc-card h3, .fc-card h4 {
+        margin-top: 0;
+        color: var(--fc-blue-dark);
+    }
+
+    .fc-mini {
+        background: var(--fc-panel-bg);
+        border: 1px solid var(--fc-border);
+        border-radius: 14px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+    }
+
+    .fc-rec-green, .fc-rec-yellow, .fc-rec-red {
+        border-radius: 16px;
+        padding: 16px 18px;
+        margin-bottom: 12px;
+        border: 2px solid;
+    }
+
+    .fc-rec-green {
+        background: var(--fc-green-bg);
+        border-color: var(--fc-green-border);
+    }
+
+    .fc-rec-yellow {
+        background: var(--fc-yellow-bg);
+        border-color: var(--fc-yellow-border);
+    }
+
+    .fc-rec-red {
+        background: var(--fc-red-bg);
+        border-color: var(--fc-red-border);
+    }
+
+    .fc-status {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .fc-status-green {
+        background: #d9f3e2;
+        color: #17653a;
+    }
+
+    .fc-status-yellow {
+        background: #fff0c8;
+        color: #7a5b00;
+    }
+
+    .fc-status-red {
+        background: #ffd7d7;
+        color: #8a1f1f;
+    }
+
+    .fc-verdict {
+        background: var(--fc-blue-soft);
+        border: 2px solid var(--fc-blue);
+        border-radius: 16px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+    }
+
+    .fc-section-title {
+        color: var(--fc-blue-dark);
+        margin-bottom: 6px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # -----------------------------
@@ -43,12 +161,14 @@ st.caption("Upload GSPro CSV data → analyze clubs → compare driver setups �
 # -----------------------------
 def _init_state():
     defaults = {
-        "analysis_mode": "Single Upload",
+        "analysis_mode": "Single Club Analysis",
         "k_loft_to_dynamic": 1.0,
-        "min_shots": 10,
+        "min_shots": 5,
         "show_raw": False,
+        "selected_focus_family": "Driver",
+        "selected_focus_club": "DR",
 
-        # Single mode driver setup
+        # Single mode
         "single_driver_brand": "Titleist",
         "single_driver_model": "TSR3",
         "single_driver_loft": 10.0,
@@ -57,7 +177,7 @@ def _init_state():
         "single_driver_shaft_weight": 60.0,
         "single_driver_shaft_flex": "6.0",
 
-        # Compare mode setup A
+        # Compare mode A
         "cmpA_driver_brand": "Titleist",
         "cmpA_driver_model": "TSR3",
         "cmpA_driver_loft": 10.0,
@@ -66,7 +186,7 @@ def _init_state():
         "cmpA_driver_shaft_weight": 60.0,
         "cmpA_driver_shaft_flex": "6.0",
 
-        # Compare mode setup B
+        # Compare mode B
         "cmpB_driver_brand": "Titleist",
         "cmpB_driver_model": "TSR3",
         "cmpB_driver_loft": 10.0,
@@ -84,45 +204,19 @@ _init_state()
 
 
 # -----------------------------
-# Styling
+# Helpers
 # -----------------------------
-st.markdown(
-    """
-    <style>
-    .fit-box {
-        padding: 16px 18px;
-        border-radius: 14px;
-        border: 2px solid #2e8b57;
-        background: #f4fff7;
-        margin-bottom: 12px;
-    }
-    .fit-box h4 {
-        margin: 0 0 8px 0;
-        color: #1f3d2e;
-    }
-    .compare-box {
-        padding: 14px 16px;
-        border-radius: 14px;
-        border: 1px solid #d6d6d6;
-        background: #fafafa;
-        margin-bottom: 10px;
-    }
-    .winner-box {
-        padding: 14px 16px;
-        border-radius: 14px;
-        border: 2px solid #1f77b4;
-        background: #f4f9ff;
-        margin-bottom: 12px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def _fmt(value, decimals=1, suffix=""):
+    if value is None:
+        return "—"
+    try:
+        if np.isnan(value):
+            return "—"
+    except Exception:
+        pass
+    return f"{value:.{decimals}f}{suffix}"
 
 
-# -----------------------------
-# Dependent-dropdown reset helpers
-# -----------------------------
 def _reset_system_and_settings_for_club(club_id: str):
     brand_key = f"{club_id}_brand"
     sys_key = f"{club_id}_sys"
@@ -166,34 +260,6 @@ def _reset_settings_for_club(club_id: str):
     st.session_state[new_key] = first_setting
 
 
-# -----------------------------
-# Utility helpers
-# -----------------------------
-def _fmt(value, decimals=1, suffix=""):
-    if value is None:
-        return "—"
-    try:
-        if np.isnan(value):
-            return "—"
-    except Exception:
-        pass
-    return f"{value:.{decimals}f}{suffix}"
-
-
-def _metric_row(summary):
-    return {
-        "Shots": summary.n,
-        "Club Speed": _fmt(summary.club_speed_avg, 1),
-        "Ball Speed": _fmt(summary.ball_speed_avg, 1),
-        "Smash": _fmt(summary.smash_avg, 2),
-        "Carry": _fmt(summary.carry_avg, 1),
-        "Offline": _fmt(summary.offline_avg, 1),
-        "Launch": _fmt(summary.vla_avg, 1),
-        "Spin": _fmt(summary.spin_avg, 0),
-        "AoA": _fmt(summary.aoa_avg, 1),
-    }
-
-
 def _driver_setup_from_prefix(prefix: str) -> DriverUserSetup:
     return DriverUserSetup(
         brand=st.session_state[f"{prefix}_driver_brand"],
@@ -207,16 +273,19 @@ def _driver_setup_from_prefix(prefix: str) -> DriverUserSetup:
 
 
 def _render_driver_setup(prefix: str, title: str):
-    st.subheader(title)
+    st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
+        brand_options = ["Titleist", "Ping", "Other"]
+        current_brand = st.session_state[f"{prefix}_driver_brand"]
+        if current_brand not in brand_options:
+            current_brand = "Other"
         st.session_state[f"{prefix}_driver_brand"] = st.selectbox(
             "Driver Brand",
-            ["Titleist", "Ping", "Other"],
+            brand_options,
+            index=brand_options.index(current_brand),
             key=f"{prefix}_driver_brand_select",
-            index=["Titleist", "Ping", "Other"].index(st.session_state[f"{prefix}_driver_brand"])
-            if st.session_state[f"{prefix}_driver_brand"] in ["Titleist", "Ping", "Other"] else 0,
         )
 
     with c2:
@@ -279,12 +348,29 @@ def _render_driver_setup(prefix: str, title: str):
             key=f"{prefix}_driver_shaft_flex_input",
         )
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _status_html(tone: str) -> str:
+    if tone == "green":
+        return '<span class="fc-status fc-status-green">Positive change</span>'
+    if tone == "yellow":
+        return '<span class="fc-status fc-status-yellow">Test carefully</span>'
+    return '<span class="fc-status fc-status-red">Avoid first</span>'
+
 
 def _render_recommendation_cards(bundle):
     for block in [bundle.swing, bundle.driver_settings, bundle.equipment_adjustment]:
+        css_class = {
+            "green": "fc-rec-green",
+            "yellow": "fc-rec-yellow",
+            "red": "fc-rec-red",
+        }.get(block.tone, "fc-rec-yellow")
+
         st.markdown(
             f"""
-            <div class="fit-box">
+            <div class="{css_class}">
+                {_status_html(block.tone)}
                 <h4>{block.title}</h4>
                 <p><strong>Suggestion:</strong> {block.suggestion}</p>
                 <p><strong>Why:</strong> {block.why}</p>
@@ -294,10 +380,71 @@ def _render_recommendation_cards(bundle):
         )
 
 
-def _render_hosel_block(club_id: str, title: str, hosel_configs: Dict[str, Dict], k_loft_to_dynamic: float):
-    st.subheader(title)
+def _render_summary_cards(summary):
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Club Speed", _fmt(summary.club_speed_avg, 1))
+    c2.metric("Ball Speed", _fmt(summary.ball_speed_avg, 1))
+    c3.metric("Smash", _fmt(summary.smash_avg, 2))
+    c4.metric("Carry", _fmt(summary.carry_avg, 1))
 
-    c1, c2, c3, c4 = st.columns([1.1, 1.4, 1.2, 1.4])
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Offline", _fmt(summary.offline_avg, 1))
+    c6.metric("Launch", _fmt(summary.vla_avg, 1))
+    c7.metric("Spin", _fmt(summary.spin_avg, 0))
+    c8.metric("AoA", _fmt(summary.aoa_avg, 1))
+
+
+def _render_focus_picker(selected_clubs: List[str]):
+    families_present = []
+    if any(c == "DR" for c in selected_clubs):
+        families_present.append("Driver")
+    if any(c.endswith("W") for c in selected_clubs):
+        families_present.append("Fairway Wood")
+    if any(c.endswith("H") for c in selected_clubs):
+        families_present.append("Hybrid")
+
+    if not families_present:
+        st.warning("No supported driver, fairway wood, or hybrid data found.")
+        st.stop()
+
+    if st.session_state["selected_focus_family"] not in families_present:
+        st.session_state["selected_focus_family"] = families_present[0]
+
+    st.markdown('<div class="fc-card">', unsafe_allow_html=True)
+    st.subheader("Choose Fitting Focus")
+
+    st.session_state["selected_focus_family"] = st.radio(
+        "What are we fitting today?",
+        families_present,
+        horizontal=True,
+        index=families_present.index(st.session_state["selected_focus_family"]),
+    )
+
+    if st.session_state["selected_focus_family"] == "Driver":
+        available = [c for c in selected_clubs if c == "DR"]
+    elif st.session_state["selected_focus_family"] == "Fairway Wood":
+        available = [c for c in selected_clubs if c.endswith("W")]
+    else:
+        available = [c for c in selected_clubs if c.endswith("H")]
+
+    if st.session_state["selected_focus_club"] not in available:
+        st.session_state["selected_focus_club"] = available[0]
+
+    st.session_state["selected_focus_club"] = st.selectbox(
+        "Choose club",
+        available,
+        index=available.index(st.session_state["selected_focus_club"]),
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+    return st.session_state["selected_focus_club"]
+
+
+def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> Dict[str, Dict]:
+    hosel_configs: Dict[str, Dict] = {}
+
+    st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
+
+    c1, c2, c3, c4 = st.columns([1.0, 1.3, 1.2, 1.1])
 
     with c1:
         handedness = st.selectbox(
@@ -335,18 +482,18 @@ def _render_hosel_block(club_id: str, title: str, hosel_configs: Dict[str, Dict]
     with c4:
         if club_id == "DR":
             default_loft = 10.0
-        elif club_id.endswith("H"):
-            default_loft = 18.0
         elif club_id.endswith("W"):
             default_loft = 15.0
+        elif club_id.endswith("H"):
+            default_loft = 18.0
         else:
-            default_loft = 0.0
+            default_loft = 10.0
 
         stated_loft = st.number_input(
             f"{club_id} Stated Loft (°)",
             min_value=0.0,
             max_value=30.0,
-            value=default_loft,
+            value=float(default_loft),
             step=0.5,
             key=f"{club_id}_loft",
         )
@@ -373,6 +520,7 @@ def _render_hosel_block(club_id: str, title: str, hosel_configs: Dict[str, Dict]
     cur_loft = getattr(cur_delta, "loft_deg", None)
     new_loft = getattr(new_delta, "loft_deg", None)
 
+    st.markdown("#### Projected Change")
     if (cur_loft is not None) and (new_loft is not None) and (proposed_setting != current_setting):
         delta_static_loft = new_loft - cur_loft
         est = estimate_launch_spin_change(delta_static_loft, k_loft_to_dynamic, club_id)
@@ -386,9 +534,13 @@ def _render_hosel_block(club_id: str, title: str, hosel_configs: Dict[str, Dict]
     elif proposed_setting != current_setting:
         ranges = system_ranges(brand, system_name)
         st.warning(
-            "Exact loft deltas for these settings aren’t encoded yet (range-only).\n\n"
+            "Exact deltas for these settings are not encoded yet.\n\n"
             f"System ranges: loft={ranges.get('loft_range_deg')}, lie={ranges.get('lie_range_deg')}."
         )
+    else:
+        st.caption("Choose a different proposed setting to see projected launch and spin changes.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     hosel_configs[club_id] = {
         "club_id": club_id,
@@ -401,64 +553,36 @@ def _render_hosel_block(club_id: str, title: str, hosel_configs: Dict[str, Dict]
         "cur_delta": asdict(cur_delta),
         "new_delta": asdict(new_delta),
     }
+    return hosel_configs
 
 
-def _render_club_analysis(canon_df: pd.DataFrame, min_shots: int, hosel_configs: Dict[str, Dict], k_loft_to_dynamic: float):
-    st.divider()
-    st.header("Club-Specific Analysis")
+def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_configs: Dict[str, Dict], k_loft_to_dynamic: float):
+    summary = summarize_by_club(canon_df)[club_id]
+    t = targets_for_club(club_id, summary.club_speed_avg)
+    launch_lo, launch_hi = t["launch"]
+    spin_lo, spin_hi = t["spin"]
 
-    summaries = summarize_by_club(canon_df)
-
-    order = {
-        "DR": 0,
-        "2W": 1, "3W": 2, "4W": 3, "5W": 4, "7W": 5, "9W": 6,
-        "2H": 10, "3H": 11, "4H": 12, "5H": 13, "6H": 14, "7H": 15
-    }
-    club_list_sorted = sorted(summaries.keys(), key=lambda c: order.get(c, 99))
-
-    for club_id in club_list_sorted:
-        s = summaries[club_id]
-        if s.n < min_shots:
-            continue
-
-        st.subheader(f"{club_id} — Overview ({s.n} shots)")
-
-        mcols = st.columns(4)
-        mcols[0].metric("Club Speed (mph)", _fmt(s.club_speed_avg, 1), None if np.isnan(s.club_speed_std) else f"±{s.club_speed_std:.1f}")
-        mcols[1].metric("Ball Speed (mph)", _fmt(s.ball_speed_avg, 1), None if np.isnan(s.ball_speed_std) else f"±{s.ball_speed_std:.1f}")
-        mcols[2].metric("Smash", _fmt(s.smash_avg, 2), None if np.isnan(s.smash_std) else f"±{s.smash_std:.2f}")
-        mcols[3].metric("Carry (yd)", _fmt(s.carry_avg, 1), None if np.isnan(s.carry_std) else f"±{s.carry_std:.1f}")
-
-        mcols2 = st.columns(4)
-        mcols2[0].metric("Offline (yd)", _fmt(s.offline_avg, 1), None if np.isnan(s.offline_std) else f"±{s.offline_std:.1f}")
-        mcols2[1].metric("Launch / VLA (°)", _fmt(s.vla_avg, 1), None if np.isnan(s.vla_std) else f"±{s.vla_std:.1f}")
-        mcols2[2].metric("Backspin (rpm)", _fmt(s.spin_avg, 0), None if np.isnan(s.spin_std) else f"±{s.spin_std:.0f}")
-        mcols2[3].metric("AoA (°)", _fmt(s.aoa_avg, 1), None if np.isnan(s.aoa_std) else f"±{s.aoa_std:.1f}")
-
+    with st.expander("Advanced Analysis"):
         st.markdown("### Limiting Factors")
         lim: List[str] = []
 
-        miss = miss_tendency(s.offline_avg)
+        miss = miss_tendency(summary.offline_avg)
         lim.append(f"Miss tendency: **{miss}**" if miss != "Unknown" else "Miss tendency: Unknown")
 
         if club_id == "DR":
-            smash_msg = smash_flag_driver(s.smash_avg)
+            smash_msg = smash_flag_driver(summary.smash_avg)
             if smash_msg:
                 lim.append(smash_msg)
 
-        t = targets_for_club(club_id, s.club_speed_avg)
-        launch_lo, launch_hi = t["launch"]
-        spin_lo, spin_hi = t["spin"]
-
-        if not np.isnan(s.vla_avg) and (s.vla_avg < launch_lo or s.vla_avg > launch_hi):
-            lim.append(f"Launch window miss: {s.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
-        if not np.isnan(s.spin_avg) and (s.spin_avg < spin_lo or s.spin_avg > spin_hi):
-            lim.append(f"Spin window miss: {s.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
+        if not np.isnan(summary.vla_avg) and (summary.vla_avg < launch_lo or summary.vla_avg > launch_hi):
+            lim.append(f"Launch window miss: {summary.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
+        if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
+            lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
 
         for item in lim:
             st.write("•", item)
 
-        st.markdown("### Hosel Recommendation")
+        st.markdown("### Settings Recommendation")
         recos: List[str] = []
 
         if club_id in hosel_configs:
@@ -471,22 +595,23 @@ def _render_club_analysis(canon_df: pd.DataFrame, min_shots: int, hosel_configs:
             needed_loft = 0.0
             needed_lie = 0.0
 
-            if not np.isnan(s.vla_avg):
+            if not np.isnan(summary.vla_avg):
                 launch_per_static_loft = 0.85 * k_loft_to_dynamic
-                if s.vla_avg < launch_lo:
-                    needed_loft = min(2.0, (launch_lo - s.vla_avg) / max(0.05, launch_per_static_loft))
-                elif s.vla_avg > launch_hi:
-                    needed_loft = max(-2.0, -(s.vla_avg - launch_hi) / max(0.05, launch_per_static_loft))
+                if summary.vla_avg < launch_lo:
+                    needed_loft = min(2.0, (launch_lo - summary.vla_avg) / max(0.05, launch_per_static_loft))
+                elif summary.vla_avg > launch_hi:
+                    needed_loft = max(-2.0, -(summary.vla_avg - launch_hi) / max(0.05, launch_per_static_loft))
 
+            miss = miss_tendency(summary.offline_avg)
             if miss == "Right miss tendency":
                 needed_lie = +0.75
             elif miss == "Left miss tendency":
                 needed_lie = -0.75
 
-            if not np.isnan(s.spin_avg):
-                if s.spin_avg < spin_lo:
+            if not np.isnan(summary.spin_avg):
+                if summary.spin_avg < spin_lo:
                     needed_loft = max(needed_loft, +0.75)
-                elif s.spin_avg > spin_hi:
+                elif summary.spin_avg > spin_hi:
                     needed_loft = min(needed_loft, -0.75)
 
             settings = list_settings(brand, system_name, handedness)
@@ -502,47 +627,42 @@ def _render_club_analysis(canon_df: pd.DataFrame, min_shots: int, hosel_configs:
             )
 
             if abs(needed_loft) < 0.25 and abs(needed_lie) < 0.25:
-                recos.append("Hosel: current setting looks fine for launch, miss pattern, and spin.")
+                recos.append("Current setting looks reasonable for launch, spin, and start-line tendencies.")
             else:
-                recos.append(f"Hosel goal: loft Δ **{needed_loft:+.2f}°**, then lie Δ **{needed_lie:+.2f}°**.")
+                recos.append(f"Hosel goal: loft Δ **{needed_loft:+.2f}°**, lie Δ **{needed_lie:+.2f}°**.")
                 if reco["type"] == "exact":
                     r = reco["recommended"]
                     recos.append(
-                        f"Hosel recommendation: change **{reco['current']} → {r['setting']}** "
+                        f"Suggested change: **{reco['current']} → {r['setting']}** "
                         f"(loft {r['loft_delta']:+.2f}°, lie {r['lie_delta']:+.2f}°)."
                     )
                 else:
                     recos.append(reco["message"])
         else:
-            recos.append("Configure this club in the Hosel Setup section to enable setting recommendations.")
+            recos.append("Configure this club in Club Settings to enable a setting recommendation.")
 
         for r in recos:
             st.write("•", r)
 
-        with st.expander(f"Show shot rows for {club_id}"):
-            show_cols = [
-                "club_raw", "club_id",
-                "club_speed_mph", "ball_speed_mph", "smash",
-                "carry_yd", "total_yd", "offline_yd",
-                "vla_deg", "backspin_rpm", "aoa_deg",
-                "club_path_deg", "face_to_path_deg", "face_to_target_deg",
-            ]
-            cols_present = [c for c in show_cols if c in canon_df.columns]
-            st.dataframe(
-                canon_df[canon_df["club_id"] == club_id][cols_present].reset_index(drop=True),
-                use_container_width=True
-            )
+        st.markdown("### Shot Table")
+        show_cols = [
+            "club_raw", "club_id",
+            "club_speed_mph", "ball_speed_mph", "smash",
+            "carry_yd", "total_yd", "offline_yd",
+            "vla_deg", "backspin_rpm", "aoa_deg",
+            "club_path_deg", "face_to_path_deg", "face_to_target_deg",
+        ]
+        cols_present = [c for c in show_cols if c in canon_df.columns]
+        st.dataframe(
+            canon_df[canon_df["club_id"] == club_id][cols_present].reset_index(drop=True),
+            use_container_width=True,
+        )
 
 
-def _render_driver_recommendation_section(canon_df: pd.DataFrame, driver_setup: DriverUserSetup):
-    driver_df = canon_df[canon_df["club_id"] == "DR"].copy()
-    if driver_df.empty:
-        st.info("No driver shots found in this upload, so driver-specific recommendations are not shown.")
-        return
-
+def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: DriverUserSetup):
     summaries = summarize_by_club(driver_df)
     if "DR" not in summaries:
-        st.info("No valid driver summary available yet.")
+        st.info("No valid driver summary available.")
         return
 
     offline_valid = driver_df["offline_yd"].dropna()
@@ -554,8 +674,7 @@ def _render_driver_recommendation_section(canon_df: pd.DataFrame, driver_setup: 
         fairway_hit_pct=fairway_pct if not np.isnan(fairway_pct) else None,
     )
 
-    st.divider()
-    st.header("🎯 Fitter Recommendations")
+    st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
     _render_recommendation_cards(bundle)
 
 
@@ -566,25 +685,24 @@ with st.sidebar:
     st.header("Mode")
     st.session_state["analysis_mode"] = st.radio(
         "Choose analysis type",
-        ["Single Upload", "Compare Driver Setups"],
-        index=0 if st.session_state["analysis_mode"] == "Single Upload" else 1,
+        ["Single Club Analysis", "Compare Driver Setups"],
+        index=0 if st.session_state["analysis_mode"] == "Single Club Analysis" else 1,
     )
 
     st.divider()
-    st.header("Hosel Estimation Model")
+    st.header("Model")
     st.session_state["k_loft_to_dynamic"] = st.slider(
         "Loft → delivered loft multiplier (k)",
         min_value=0.6,
         max_value=1.6,
         value=float(st.session_state["k_loft_to_dynamic"]),
         step=0.05,
-        help="Higher = adding loft tends to raise launch more for your delivery / strike.",
     )
 
     st.divider()
     st.header("Filters")
     st.session_state["min_shots"] = st.slider(
-        "Min shots per Club",
+        "Min shots per club",
         5,
         50,
         int(st.session_state["min_shots"]),
@@ -596,16 +714,30 @@ with st.sidebar:
     st.session_state["show_raw"] = st.checkbox("Show raw tables", value=bool(st.session_state["show_raw"]))
 
 
-# -----------------------------
-# Main modes
-# -----------------------------
 analysis_mode = st.session_state["analysis_mode"]
 k_loft_to_dynamic = float(st.session_state["k_loft_to_dynamic"])
 min_shots = int(st.session_state["min_shots"])
 show_raw = bool(st.session_state["show_raw"])
 
 
-if analysis_mode == "Single Upload":
+# -----------------------------
+# Hero
+# -----------------------------
+st.markdown(
+    """
+    <div class="fc-hero">
+        <h2 style="margin:0 0 8px 0;">Cleaner fitting workflow</h2>
+        <div>Upload data, pick one club, get clearer next steps. Use compare mode separately when you want to test two driver setups.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# -----------------------------
+# Single Club Analysis
+# -----------------------------
+if analysis_mode == "Single Club Analysis":
     with st.sidebar:
         st.header("Upload")
         uploaded = st.file_uploader("Upload GSPro CSV", type=["csv"], key="single_upload")
@@ -622,10 +754,10 @@ if analysis_mode == "Single Upload":
     if show_raw:
         c1, c2 = st.columns(2)
         with c1:
-            st.subheader("Raw CSV (first 200)")
+            st.subheader("Raw CSV")
             st.dataframe(raw_df.head(200), use_container_width=True)
         with c2:
-            st.subheader("Canonicalized (first 200)")
+            st.subheader("Canonicalized")
             st.dataframe(canon_df.head(200), use_container_width=True)
 
     club_counts = canon_df["club_id"].value_counts().to_dict()
@@ -636,13 +768,8 @@ if analysis_mode == "Single Upload":
         st.warning(f"No clubs have at least {min_shots} shots. Try lowering the filter or collect more data.")
         st.stop()
 
-    st.subheader("Detected Clubs")
-    cols = st.columns(min(6, len(club_ids)))
-    for i, c in enumerate(club_ids):
-        cols[i % len(cols)].metric(c, club_counts.get(c, 0))
-
     selected_clubs = st.multiselect(
-        "Choose which clubs to analyze",
+        "Detected clubs in this upload",
         options=club_ids,
         default=club_ids,
     )
@@ -651,97 +778,84 @@ if analysis_mode == "Single Upload":
         st.stop()
 
     canon_df = canon_df[canon_df["club_id"].isin(selected_clubs)].copy()
+    focus_club = _render_focus_picker(selected_clubs)
+    focus_df = canon_df[canon_df["club_id"] == focus_club].copy()
 
-    st.divider()
-    st.header("Shot Dispersion Map")
-    render_dispersion(canon_df)
+    summaries = summarize_by_club(focus_df)
+    if focus_club not in summaries:
+        st.warning("No valid data for the selected club.")
+        st.stop()
 
-    st.divider()
-    st.header("Driver Setup")
-    _render_driver_setup("single", "Current Driver Setup")
+    focus_summary = summaries[focus_club]
 
-    single_driver_setup = _driver_setup_from_prefix("single")
-    _render_driver_recommendation_section(canon_df, single_driver_setup)
+    top1, top2 = st.columns([1.35, 1.0])
 
-    st.divider()
-    st.header("Hosel Setup (Driver / Fairways / Hybrids)")
-    st.caption("Configure hosel settings by actual club. Settings stay in place while you continue working in the app.")
+    with top1:
+        st.markdown('<div class="fc-card"><h3>Dispersion</h3>', unsafe_allow_html=True)
+        render_dispersion(focus_df)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    detected_fw = [c for c in selected_clubs if c.endswith("W")]
-    detected_hy = [c for c in selected_clubs if c.endswith("H")]
-    detected_dr = [c for c in selected_clubs if c == "DR"]
+    with top2:
+        st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
+        _render_summary_cards(focus_summary)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    hosel_configs: Dict[str, Dict] = {}
+        if focus_club == "DR":
+            _render_driver_setup("single", "Driver Setup")
+            _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
 
-    if len(detected_dr) > 0:
-        _render_hosel_block("DR", "Driver", hosel_configs, k_loft_to_dynamic)
-    else:
-        st.caption("No driver detected / selected (DR).")
+    if focus_club != "DR":
+        st.markdown('<div class="fc-card"><h3>Fitter Guidance</h3>', unsafe_allow_html=True)
+        miss = miss_tendency(focus_summary.offline_avg)
+        family = club_family(focus_club)
 
-    if len(detected_fw) == 0:
-        st.caption("No fairway woods detected / selected (e.g., 3W / 5W / 7W).")
-    elif len(detected_fw) == 1:
-        _render_hosel_block(detected_fw[0], f"Fairway: {detected_fw[0]}", hosel_configs, k_loft_to_dynamic)
-    else:
-        st.subheader("Fairway Woods")
-        max_fw = min(6, len(detected_fw))
-        default_fw = min(2, max_fw)
+        guidance_lines = []
 
-        fw_slider_key = f"n_fw__{'_'.join(detected_fw)}"
-        n_fw = st.slider(
-            "How many fairway woods to configure?",
-            min_value=1,
-            max_value=max_fw,
-            value=default_fw,
-            step=1,
-            key=fw_slider_key,
-        )
+        if family == "Fairway Wood":
+            if not np.isnan(focus_summary.vla_avg) and focus_summary.vla_avg < targets_for_club(focus_club, focus_summary.club_speed_avg)["launch"][0]:
+                guidance_lines.append("This club appears to need more launch first. Try more loft or a more launch-friendly setup before chasing lower spin.")
+            if miss == "Right miss tendency":
+                guidance_lines.append("Your miss pattern trends right, so test a slightly more upright or draw-help setting before changing flex.")
+            if np.isnan(focus_summary.vla_avg) or np.isnan(focus_summary.spin_avg):
+                guidance_lines.append("Keep collecting shots so the app can get cleaner launch and spin trends.")
+        elif family == "Hybrid":
+            if miss == "Centered":
+                guidance_lines.append("This hybrid looks fairly playable. Keep settings stable and focus on repeatability.")
+            elif miss == "Right miss tendency":
+                guidance_lines.append("If this hybrid leaks right, test a slightly more upright setting or slightly softer-feeling profile before going stiffer.")
+            else:
+                guidance_lines.append("If this hybrid turns over too much, test a more neutral setting before changing shaft.")
+        else:
+            guidance_lines.append("Collect more shots for cleaner guidance.")
 
-        for i in range(n_fw):
-            club_choice = st.selectbox(
-                f"Fairway slot {i+1}: which club?",
-                detected_fw,
-                key=f"fw_slot_{i}__{'_'.join(detected_fw)}"
-            )
-            _render_hosel_block(club_choice, f"Fairway: {club_choice}", hosel_configs, k_loft_to_dynamic)
+        for line in guidance_lines:
+            st.write("•", line)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    if len(detected_hy) == 0:
-        st.caption("No hybrids detected / selected.")
-    elif len(detected_hy) == 1:
-        _render_hosel_block(detected_hy[0], f"Hybrid: {detected_hy[0]}", hosel_configs, k_loft_to_dynamic)
-    else:
-        st.subheader("Hybrids")
-        max_hy = min(6, len(detected_hy))
-        default_hy = min(2, max_hy)
+    hosel_configs = _render_hosel_block(
+        club_id=focus_club,
+        title=f"Club Settings — {focus_club}",
+        k_loft_to_dynamic=k_loft_to_dynamic,
+    )
 
-        hy_slider_key = f"n_hy__{'_'.join(detected_hy)}"
-        n_hy = st.slider(
-            "How many hybrids to configure?",
-            min_value=1,
-            max_value=max_hy,
-            value=default_hy,
-            step=1,
-            key=hy_slider_key,
-        )
+    _render_advanced_analysis(
+        club_id=focus_club,
+        canon_df=focus_df,
+        hosel_configs=hosel_configs,
+        k_loft_to_dynamic=k_loft_to_dynamic,
+    )
 
-        for i in range(n_hy):
-            club_choice = st.selectbox(
-                f"Hybrid slot {i+1}: which club?",
-                detected_hy,
-                key=f"hy_slot_{i}__{'_'.join(detected_hy)}"
-            )
-            _render_hosel_block(club_choice, f"Hybrid: {club_choice}", hosel_configs, k_loft_to_dynamic)
 
-    _render_club_analysis(canon_df, min_shots, hosel_configs, k_loft_to_dynamic)
-
+# -----------------------------
+# Compare Driver Setups
+# -----------------------------
 else:
     with st.sidebar:
         st.header("Compare Uploads")
         uploaded_a = st.file_uploader("Upload Setup A CSV", type=["csv"], key="compare_upload_a")
         uploaded_b = st.file_uploader("Upload Setup B CSV", type=["csv"], key="compare_upload_b")
 
-    st.header("Compare Driver Setups")
-    st.caption("Use this to compare two different driver settings, heads, or shafts.")
+    st.markdown('<div class="fc-card"><h3>Compare Two Driver Setups</h3><p>Best for A1 vs A2, shaft vs shaft, or head vs head testing.</p></div>', unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
@@ -777,30 +891,25 @@ else:
     dr_b = canon_b[canon_b["club_id"] == "DR"].copy()
 
     if dr_a.empty or dr_b.empty:
-        st.warning("Both uploaded files need driver shots (DR) for comparison mode.")
+        st.warning("Both uploaded files need driver shots (DR) for compare mode.")
         st.stop()
-
-    setup_a = _driver_setup_from_prefix("cmpA")
-    setup_b = _driver_setup_from_prefix("cmpB")
 
     compare = compare_driver_setups(dr_a, dr_b, "Setup A", "Setup B")
 
-    st.divider()
-    st.header("Dispersion Comparison")
     map_a, map_b = st.columns(2)
     with map_a:
-        st.subheader("Setup A")
+        st.markdown('<div class="fc-card"><h3>Setup A Dispersion</h3>', unsafe_allow_html=True)
         render_dispersion(dr_a)
+        st.markdown("</div>", unsafe_allow_html=True)
     with map_b:
-        st.subheader("Setup B")
+        st.markdown('<div class="fc-card"><h3>Setup B Dispersion</h3>', unsafe_allow_html=True)
         render_dispersion(dr_b)
-
-    st.divider()
-    st.header("Side-by-Side Driver Metrics")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     a = compare["a"]
     b = compare["b"]
 
+    st.markdown('<div class="fc-card"><h3>Side-by-Side Metrics</h3>', unsafe_allow_html=True)
     metric_df = pd.DataFrame(
         {
             "Metric": [
@@ -837,12 +946,13 @@ else:
         }
     )
     st.dataframe(metric_df, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     winners = compare["winners"]
     st.markdown(
         f"""
-        <div class="winner-box">
-            <h4>Comparison Verdict</h4>
+        <div class="fc-verdict">
+            <h3 style="margin-top:0;">Comparison Verdict</h3>
             <p><strong>Longest carry:</strong> {winners['longest_carry']}</p>
             <p><strong>Fastest ball speed:</strong> {winners['fastest_ball_speed']}</p>
             <p><strong>Straightest:</strong> {winners['straightest']}</p>
@@ -852,6 +962,9 @@ else:
         """,
         unsafe_allow_html=True,
     )
+
+    setup_a = _driver_setup_from_prefix("cmpA")
+    setup_b = _driver_setup_from_prefix("cmpB")
 
     summaries_a = summarize_by_club(dr_a)
     summaries_b = summarize_by_club(dr_b)
@@ -867,46 +980,39 @@ else:
         fairway_hit_pct=float((dr_b["offline_yd"].dropna().abs() <= 15).mean() * 100.0) if len(dr_b["offline_yd"].dropna()) else None,
     )
 
-    st.divider()
-    st.header("🎯 Compare-Mode Recommendations")
-
-    cmp1, cmp2 = st.columns(2)
-    with cmp1:
-        st.subheader("Setup A Recommendation")
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        st.markdown('<div class="fc-card"><h3>Setup A Recommendation</h3></div>', unsafe_allow_html=True)
         _render_recommendation_cards(rec_a)
-    with cmp2:
-        st.subheader("Setup B Recommendation")
+    with rc2:
+        st.markdown('<div class="fc-card"><h3>Setup B Recommendation</h3></div>', unsafe_allow_html=True)
         _render_recommendation_cards(rec_b)
 
-    st.divider()
-    st.subheader("Best Overall Interpretation")
-
-    overall_lines: List[str] = []
     best_overall = winners["best_overall"]
-
+    interpretation = []
     if best_overall == "Setup A":
-        overall_lines.append("Setup A looks like the stronger overall gamer from this test.")
+        interpretation.append("Setup A looks like the stronger overall gamer from this test.")
     elif best_overall == "Setup B":
-        overall_lines.append("Setup B looks like the stronger overall gamer from this test.")
+        interpretation.append("Setup B looks like the stronger overall gamer from this test.")
     else:
-        overall_lines.append("This test is close enough that neither setup clearly dominates overall.")
+        interpretation.append("This comparison is close enough that neither setup clearly dominates overall.")
 
     if winners["longest_carry"] != winners["straightest"]:
-        overall_lines.append("One setup appears better for distance, while the other appears better for control.")
+        interpretation.append("One setup appears better for distance while the other appears better for control.")
     else:
-        overall_lines.append("The same setup appears to be winning both carry and dispersion, which is a strong sign.")
+        interpretation.append("The same setup appears to be winning both carry and dispersion, which is a strong sign.")
 
-    overall_lines.append("Keep the winning setup honest by repeating the test with a fresh 8–10 driver shots per setup on another day.")
+    interpretation.append("Repeat the test on another day with 8–10 fresh shots per setup to confirm the winner.")
 
     st.markdown(
         f"""
-        <div class="fit-box">
-            <h4>Equipment Adjustment</h4>
-            <p>{" ".join(overall_lines)}</p>
+        <div class="fc-card">
+            <h3>Best Overall Interpretation</h3>
+            <p>{" ".join(interpretation)}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 st.divider()
-st.caption("Next useful upgrade: save preferred setup(s) permanently and add face-to-path pattern classification like push fade vs pull hook.")
+st.caption("Next smart upgrade: save preferred setups permanently, then add face-to-path pattern labels like push fade, pull fade, push draw, and pull hook.")

@@ -154,6 +154,21 @@ def _init_state():
         "show_raw": False,
         "selected_focus_family": "Driver",
         "selected_focus_club": "DR",
+        "single_fw_brand": "Titleist",
+        "single_fw_model": "GT2",
+        "single_fw_loft": 15.0,
+        "single_fw_hosel": "A1",
+        "single_fw_shaft_model": "HZRDUS Black",
+        "single_fw_shaft_weight": 70.0,
+        "single_fw_shaft_flex": "6.0",
+
+        "single_hy_brand": "Titleist",
+        "single_hy_model": "GT2",
+        "single_hy_loft": 18.0,
+        "single_hy_hosel": "A1",
+        "single_hy_shaft_model": "HZRDUS Black",
+        "single_hy_shaft_weight": 80.0,
+        "single_hy_shaft_flex": "6.0",
 
         # Single mode driver setup
         "single_driver_brand": "Titleist",
@@ -813,19 +828,21 @@ def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: Driver
 def _render_non_driver_recommendations(
     focus_summary,
     hosel_configs: Dict[str, Dict],
+    build_cfg: Dict[str, object] | None = None,
 ):
     club_id = focus_summary.club_id
     cfg = hosel_configs.get(club_id, {})
+    build_cfg = build_cfg or {}
 
     bundle = build_non_driver_recommendations(
         summary=focus_summary,
-        stated_loft_deg=cfg.get("stated_loft"),
-        brand=cfg.get("brand"),
-        model=None,
-        shaft_model=None,
-        shaft_weight_g=None,
-        shaft_flex=None,
-        hosel_setting=cfg.get("current_setting"),
+        stated_loft_deg=build_cfg.get("loft_deg", cfg.get("stated_loft")),
+        brand=build_cfg.get("brand", cfg.get("brand")),
+        model=build_cfg.get("model"),
+        shaft_model=build_cfg.get("shaft_model"),
+        shaft_weight_g=build_cfg.get("shaft_weight_g"),
+        shaft_flex=build_cfg.get("shaft_flex"),
+        hosel_setting=build_cfg.get("hosel_setting", cfg.get("current_setting")),
     )
 
     st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
@@ -944,9 +961,19 @@ if analysis_mode == "Single Club Analysis":
         _render_summary_cards(focus_summary)
         st.markdown("</div>", unsafe_allow_html=True)
 
+        non_driver_build_cfg = None
+
         if focus_club == "DR":
             _render_driver_setup("single", "Driver Build")
             _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
+
+        elif focus_club.endswith("W"):
+            _render_non_driver_build("single_fw", "Fairway Wood Build", "Fairway Wood")
+            non_driver_build_cfg = _club_build_from_prefix("single_fw")
+
+        elif focus_club.endswith("H"):
+            _render_non_driver_build("single_hy", "Hybrid Build", "Hybrid")
+            non_driver_build_cfg = _club_build_from_prefix("single_hy")
 
     hosel_title = f"Hosel Settings — {focus_club}"
 
@@ -957,7 +984,7 @@ if analysis_mode == "Single Club Analysis":
     )
 
     if focus_club != "DR":
-        _render_non_driver_recommendations(focus_summary, hosel_configs)
+        _render_non_driver_recommendations(focus_summary, hosel_configs, non_driver_build_cfg)
 
     _render_advanced_analysis(
         club_id=focus_club,

@@ -289,12 +289,22 @@ def _render_driver_setup(prefix: str, title: str):
 
     with c2:
         brand = st.session_state[f"{prefix}_driver_brand"]
-        if brand == "Titleist":
-            model_options = ["TSR2", "TSR3", "GT2", "GT3", "Other"]
-        elif brand == "Ping":
-            model_options = ["G430 Max", "G430 LST", "G440 Max", "G440 LST", "Other"]
-        else:
-            model_options = ["Other"]
+
+        DRIVER_MODEL_OPTIONS = {
+            "Titleist": ["GT2", "GT3", "GT4", "TSR2", "TSR3", "TSR4", "Other"],
+            "TaylorMade": ["Qi35", "Qi35 Max", "Qi35 LS", "Qi35 Max Lite", "Qi10", "Qi10 LS", "Other"],
+            "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Elyte Triple Diamond Max", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Other"],
+            "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G440 K", "G430 MAX 10K", "G430 LST", "Other"],
+            "Mizuno": ["ST-G 440", "ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "Other"],
+            "Srixon": ["ZXi", "ZXi LS", "ZXi MAX", "ZX5 LS Mk II", "ZX5", "ZX7 Mk II", "Other"],
+            "Cleveland": ["Other"],
+            "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX-K", "DS-ADAPT MAX-D", "DARKSPEED X", "DARKSPEED LS", "Other"],
+            "PXG": ["Black Ops", "Black Ops Tour-1", "Black Ops Ultra-Lite", "0311 GEN6", "0311 XF GEN6", "0311 GEN5", "Other"],
+            "Wilson Staff": ["DYNAPWR LS", "DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR Carbon Lite", "DYNAPWR Max+", "DYNAPWR Max+ Lite", "Other"],
+            "Other": ["Other"],
+        }
+
+        model_options = DRIVER_MODEL_OPTIONS.get(brand, ["Other"])
 
         current_model = st.session_state[f"{prefix}_driver_model"]
         if current_model not in model_options:

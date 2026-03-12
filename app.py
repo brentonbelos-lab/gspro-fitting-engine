@@ -85,14 +85,6 @@ st.markdown(
         color: var(--fc-blue-dark);
     }
 
-    .fc-mini {
-        background: var(--fc-panel-bg);
-        border: 1px solid var(--fc-border);
-        border-radius: 14px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
-    }
-
     .fc-rec-green, .fc-rec-yellow, .fc-rec-red {
         border-radius: 16px;
         padding: 16px 18px;
@@ -146,11 +138,6 @@ st.markdown(
         padding: 16px 18px;
         margin-bottom: 14px;
     }
-
-    .fc-section-title {
-        color: var(--fc-blue-dark);
-        margin-bottom: 6px;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -169,7 +156,7 @@ def _init_state():
         "selected_focus_family": "Driver",
         "selected_focus_club": "DR",
 
-        # Single mode
+        # Single mode driver setup
         "single_driver_brand": "Titleist",
         "single_driver_model": "TSR3",
         "single_driver_loft": 10.0,
@@ -359,27 +346,6 @@ def _status_html(tone: str) -> str:
         return '<span class="fc-status fc-status-yellow">Test carefully</span>'
     return '<span class="fc-status fc-status-red">Avoid first</span>'
 
-def _render_non_driver_recommendations(
-    focus_summary,
-    hosel_configs: Dict[str, Dict],
-):
-    club_id = focus_summary.club_id
-    cfg = hosel_configs.get(club_id, {})
-
-    bundle = build_non_driver_recommendations(
-        summary=focus_summary,
-        stated_loft_deg=cfg.get("stated_loft"),
-        brand=cfg.get("brand"),
-        model=None,
-        shaft_model=None,
-        shaft_weight_g=None,
-        shaft_flex=None,
-        hosel_setting=cfg.get("current_setting"),
-    )
-
-    st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
-    _render_recommendation_cards(bundle)
-    
 
 def _render_recommendation_cards(bundle):
     for block in [bundle.swing, bundle.driver_settings, bundle.equipment_adjustment]:
@@ -700,6 +666,28 @@ def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: Driver
     _render_recommendation_cards(bundle)
 
 
+def _render_non_driver_recommendations(
+    focus_summary,
+    hosel_configs: Dict[str, Dict],
+):
+    club_id = focus_summary.club_id
+    cfg = hosel_configs.get(club_id, {})
+
+    bundle = build_non_driver_recommendations(
+        summary=focus_summary,
+        stated_loft_deg=cfg.get("stated_loft"),
+        brand=cfg.get("brand"),
+        model=None,
+        shaft_model=None,
+        shaft_weight_g=None,
+        shaft_flex=None,
+        hosel_setting=cfg.get("current_setting"),
+    )
+
+    st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
+    _render_recommendation_cards(bundle)
+
+
 # -----------------------------
 # Sidebar
 # -----------------------------
@@ -826,16 +814,6 @@ if analysis_mode == "Single Club Analysis":
             _render_driver_setup("single", "Driver Setup")
             _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
 
-    if focus_club != "DR":
-        temp_hosel_cfg = {
-            focus_club: {
-                "stated_loft": 15.0 if focus_club.endswith("W") else 18.0,
-                "brand": None,
-                "current_setting": None,
-            }
-        }
-        _render_non_driver_recommendations(focus_summary, temp_hosel_cfg)
-
     hosel_configs = _render_hosel_block(
         club_id=focus_club,
         title=f"Club Settings — {focus_club}",
@@ -882,7 +860,7 @@ else:
 
     st.success(
         f"Loaded Setup A: {len(canon_a)} shots (**{fmt_a}**) | "
-        f"Setup B: {len(canon_b)} shots (**{fmt_b}**)"
+        f"Loaded Setup B: {len(canon_b)} shots (**{fmt_b}**)"
     )
 
     if show_raw:
@@ -1022,4 +1000,4 @@ else:
     )
 
 st.divider()
-st.caption("Next smart upgrade: add a fairway wood and hybrid recommendation engine, then add face-to-path shot-shape labels like push fade, pull fade, push draw, and pull hook.")
+st.caption("Next smart upgrade: add face-to-path shot-shape labels like push fade, pull fade, push draw, and pull hook.")

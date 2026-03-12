@@ -22,7 +22,6 @@ from fit_engine import (
     build_driver_recommendations,
     build_non_driver_recommendations,
     canonicalize,
-    club_family,
     compare_driver_setups,
     estimate_launch_spin_change,
     miss_tendency,
@@ -778,17 +777,7 @@ if analysis_mode == "Single Club Analysis":
         st.warning(f"No clubs have at least {min_shots} shots. Try lowering the filter or collect more data.")
         st.stop()
 
-    selected_clubs = st.multiselect(
-        "Detected clubs in this upload",
-        options=club_ids,
-        default=club_ids,
-    )
-
-    if not selected_clubs:
-        st.stop()
-
-    canon_df = canon_df[canon_df["club_id"].isin(selected_clubs)].copy()
-    focus_club = _render_focus_picker(selected_clubs)
+    focus_club = _render_focus_picker(club_ids)
     focus_df = canon_df[canon_df["club_id"] == focus_club].copy()
 
     summaries = summarize_by_club(focus_df)
@@ -802,7 +791,7 @@ if analysis_mode == "Single Club Analysis":
 
     with top1:
         st.markdown('<div class="fc-card"><h3>Dispersion</h3>', unsafe_allow_html=True)
-        render_dispersion(focus_df, key_prefix="single_focus")
+        render_dispersion(focus_df, key_prefix="single_focus", lock_club=focus_club)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with top2:
@@ -811,12 +800,13 @@ if analysis_mode == "Single Club Analysis":
         st.markdown("</div>", unsafe_allow_html=True)
 
         if focus_club == "DR":
-            _render_driver_setup("single", "Driver Setup")
+            _render_driver_setup("single", "Driver Build")
             _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
 
+    hosel_title = f"Hosel / Loft Testing — {focus_club}" if focus_club == "DR" else f"Club Settings — {focus_club}"
     hosel_configs = _render_hosel_block(
         club_id=focus_club,
-        title=f"Club Settings — {focus_club}",
+        title=hosel_title,
         k_loft_to_dynamic=k_loft_to_dynamic,
     )
 

@@ -896,15 +896,15 @@ else:
 
     compare = compare_driver_setups(dr_a, dr_b, "Setup A", "Setup B")
 
-    map_a, map_b = st.columns(2)
-    with map_a:
-        st.markdown('<div class="fc-card"><h3>Setup A Dispersion</h3>', unsafe_allow_html=True)
-        render_dispersion(dr_a)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with map_b:
-        st.markdown('<div class="fc-card"><h3>Setup B Dispersion</h3>', unsafe_allow_html=True)
-        render_dispersion(dr_b)
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('<div class="fc-card"><h3>Compare Dispersion</h3>', unsafe_allow_html=True)
+    render_compare_dispersion(
+        dr_a,
+        dr_b,
+        key_prefix="driver_compare",
+        label_a="Setup A",
+        label_b="Setup B",
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     a = compare["a"]
     b = compare["b"]
@@ -1015,4 +1015,4 @@ else:
     )
 
 st.divider()
-st.caption("Next smart upgrade: save preferred setups permanently, then add face-to-path pattern labels like push fade, pull fade, push draw, and pull hook.")
+st.caption("Next smart upgrade: add a fairway wood and hybrid recommendation engine, then add face-to-path shot-shape labels like push fade, pull fade, push draw, and pull hook.")

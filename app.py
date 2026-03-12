@@ -827,32 +827,14 @@ if analysis_mode == "Single Club Analysis":
             _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
 
     if focus_club != "DR":
-        st.markdown('<div class="fc-card"><h3>Fitter Guidance</h3>', unsafe_allow_html=True)
-        miss = miss_tendency(focus_summary.offline_avg)
-        family = club_family(focus_club)
-
-        guidance_lines = []
-
-        if family == "Fairway Wood":
-            if not np.isnan(focus_summary.vla_avg) and focus_summary.vla_avg < targets_for_club(focus_club, focus_summary.club_speed_avg)["launch"][0]:
-                guidance_lines.append("This club appears to need more launch first. Try more loft or a more launch-friendly setup before chasing lower spin.")
-            if miss == "Right miss tendency":
-                guidance_lines.append("Your miss pattern trends right, so test a slightly more upright or draw-help setting before changing flex.")
-            if np.isnan(focus_summary.vla_avg) or np.isnan(focus_summary.spin_avg):
-                guidance_lines.append("Keep collecting shots so the app can get cleaner launch and spin trends.")
-        elif family == "Hybrid":
-            if miss == "Centered":
-                guidance_lines.append("This hybrid looks fairly playable. Keep settings stable and focus on repeatability.")
-            elif miss == "Right miss tendency":
-                guidance_lines.append("If this hybrid leaks right, test a slightly more upright setting or slightly softer-feeling profile before going stiffer.")
-            else:
-                guidance_lines.append("If this hybrid turns over too much, test a more neutral setting before changing shaft.")
-        else:
-            guidance_lines.append("Collect more shots for cleaner guidance.")
-
-        for line in guidance_lines:
-            st.write("•", line)
-        st.markdown("</div>", unsafe_allow_html=True)
+        temp_hosel_cfg = {
+            focus_club: {
+                "stated_loft": 15.0 if focus_club.endswith("W") else 18.0,
+                "brand": None,
+                "current_setting": None,
+            }
+        }
+        _render_non_driver_recommendations(focus_summary, temp_hosel_cfg)
 
     hosel_configs = _render_hosel_block(
         club_id=focus_club,

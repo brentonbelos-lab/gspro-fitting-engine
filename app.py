@@ -984,6 +984,7 @@ if analysis_mode == "Single Club Analysis":
             hosel_configs,
             _club_build_from_prefix("single_fw"),
         )
+        
     elif focus_club.endswith("H"):
         _render_non_driver_recommendations(
             focus_summary,
@@ -991,19 +992,6 @@ if analysis_mode == "Single Club Analysis":
             _club_build_from_prefix("single_hy"),
         )
     
-    _render_advanced_analysis(
-        club_id=focus_club,
-        canon_df=focus_df,
-        hosel_configs=hosel_configs,
-        k_loft_to_dynamic=k_loft_to_dynamic,
-    )
-    
-    hosel_configs = _render_hosel_block(
-        club_id=focus_club,
-        title=f"Club Settings — {focus_club}",
-        k_loft_to_dynamic=k_loft_to_dynamic,
-    )
-
     _render_advanced_analysis(
         club_id=focus_club,
         canon_df=focus_df,

@@ -947,9 +947,7 @@ if analysis_mode == "Single Club Analysis":
         st.stop()
 
     focus_summary = summaries[focus_club]
-
-    non_driver_build_cfg = None
-
+    
     top1, top2 = st.columns([1.35, 1.0])
 
     with top1:
@@ -961,8 +959,6 @@ if analysis_mode == "Single Club Analysis":
         st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
         _render_summary_cards(focus_summary)
         st.markdown("</div>", unsafe_allow_html=True)
-
-        non_driver_build_cfg = None
 
         if focus_club == "DR":
             _render_driver_setup("single", "Driver Build")
@@ -978,8 +974,18 @@ if analysis_mode == "Single Club Analysis":
 
     hosel_title = f"Hosel Settings — {focus_club}"
 
-    if focus_club != "DR":
-        _render_non_driver_recommendations(focus_summary, hosel_configs, non_driver_build_cfg)
+    if focus_club.endswith("W"):
+        _render_non_driver_recommendations(
+            focus_summary,
+            hosel_configs,
+            _club_build_from_prefix("single_fw"),
+        )
+    elif focus_club.endswith("H"):
+        _render_non_driver_recommendations(
+            focus_summary,
+            hosel_configs,
+            _club_build_from_prefix("single_hy"),
+        )
     
     hosel_configs = _render_hosel_block(
         club_id=focus_club,

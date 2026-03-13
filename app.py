@@ -940,40 +940,44 @@ if analysis_mode == "Single Club Analysis":
 
     focus_club = _render_focus_picker(club_ids)
     focus_df = canon_df[canon_df["club_id"] == focus_club].copy()
-
+    
     summaries = summarize_by_club(focus_df)
     if focus_club not in summaries:
         st.warning("No valid data for the selected club.")
         st.stop()
-
+    
     focus_summary = summaries[focus_club]
     
     top1, top2 = st.columns([1.35, 1.0])
-
+    
     with top1:
         st.markdown('<div class="fc-card"><h3>Dispersion</h3>', unsafe_allow_html=True)
         render_dispersion(focus_df, key_prefix="single_focus")
         st.markdown("</div>", unsafe_allow_html=True)
-
+    
     with top2:
         st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
         _render_summary_cards(focus_summary)
         st.markdown("</div>", unsafe_allow_html=True)
-
+    
         if focus_club == "DR":
             _render_driver_setup("single", "Driver Build")
             _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
-
+    
         elif focus_club.endswith("W"):
             _render_non_driver_build("single_fw", "Fairway Wood Build", "Fairway Wood")
-            non_driver_build_cfg = _club_build_from_prefix("single_fw")
-
+    
         elif focus_club.endswith("H"):
             _render_non_driver_build("single_hy", "Hybrid Build", "Hybrid")
-            non_driver_build_cfg = _club_build_from_prefix("single_hy")
-
+    
     hosel_title = f"Hosel Settings — {focus_club}"
-
+    
+    hosel_configs = _render_hosel_block(
+        club_id=focus_club,
+        title=hosel_title,
+        k_loft_to_dynamic=k_loft_to_dynamic,
+    )
+    
     if focus_club.endswith("W"):
         _render_non_driver_recommendations(
             focus_summary,
@@ -986,6 +990,13 @@ if analysis_mode == "Single Club Analysis":
             hosel_configs,
             _club_build_from_prefix("single_hy"),
         )
+    
+    _render_advanced_analysis(
+        club_id=focus_club,
+        canon_df=focus_df,
+        hosel_configs=hosel_configs,
+        k_loft_to_dynamic=k_loft_to_dynamic,
+    )
     
     hosel_configs = _render_hosel_block(
         club_id=focus_club,

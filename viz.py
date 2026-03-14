@@ -19,6 +19,9 @@ class DispersionConfig:
     fairway_end_mode: str = "p95"
     right_miss_down: bool = True
 
+    x_pad_pct: float = 0.08
+    y_pad_pct: float = 0.18
+
     show_centerline: bool = True
     show_target_marker: bool = True
     keep_proportions: bool = False
@@ -55,7 +58,6 @@ def _dispersion_ellipse_radii(dx: np.ndarray, dy: np.ndarray, mode: str) -> Tupl
     if m == "2sigma":
         return 2.0 * sx, 2.0 * sy
 
-    # default to 1sigma
     return sx, sy
 
 
@@ -114,22 +116,6 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
     x_min = 0.0
     x_max_data = float(d["_x"].max())
 
-    x_vals = d["_x"].values.astype(float)
-
-    if cfg.fairway_end_mode == "p95":
-        fw_x1 = float(np.nanpercentile(x_vals, 95))
-        fw_x1 = max(fw_x1, float(np.nanpercentile(x_vals, 75)))
-    else:
-        fw_x1 = x_max_data
-
-    # Start landing area near where shots actually begin to finish,
-    # not all the way from the tee.
-    fw_x0 = max(0.0, float(np.nanpercentile(x_vals, 10)) - 20.0)
-
-    # Ensure the landing area still has some visible length
-    if fw_x1 - fw_x0 < 40.0:
-        fw_x0 = max(0.0, fw_x1 - 40.0)
-
     # Chart ends 20 yards after the furthest shot
     x_max = x_max_data + 20.0
 
@@ -140,8 +126,6 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
     return {
         "x_min": x_min,
         "x_max": x_max,
-        "fw_x0": fw_x0,
-        "fw_x1": fw_x1,
         "y_lim": y_lim,
     }
 
@@ -317,7 +301,7 @@ def _build_dispersion_figure(
         rx, ry = _dispersion_ellipse_radii(dx, dy, cfg.circle_mode)
         rx = max(rx, cfg.circle_min_radius_yd)
         ry = max(ry, cfg.circle_min_radius_yd)
-        
+
         fig.add_trace(_ellipse_trace(cx, cy, rx, ry, color=color, name=str(club), opacity=cfg.circle_opacity))
 
         fig.add_trace(go.Scatter(
@@ -348,12 +332,14 @@ def _build_dispersion_figure(
             range=[bounds["x_min"], bounds["x_max"]],
             zeroline=False,
             showgrid=True,
+            gridcolor="rgba(180, 190, 205, 0.35)",
         ),
         yaxis=dict(
             title="Lateral (yd) — right miss down",
             range=[-bounds["y_lim"], bounds["y_lim"]],
             zeroline=False,
             showgrid=True,
+            gridcolor="rgba(180, 190, 205, 0.35)",
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
@@ -414,10 +400,11 @@ def _build_compare_dispersion_figure(
         cy = float(d["_y"].mean())
         dx = (d["_x"].values - cx).astype(float)
         dy = (d["_y"].values - cy).astype(float)
+
         rx, ry = _dispersion_ellipse_radii(dx, dy, cfg.circle_mode)
         rx = max(rx, cfg.circle_min_radius_yd)
         ry = max(ry, cfg.circle_min_radius_yd)
-        
+
         fig.add_trace(_ellipse_trace(cx, cy, rx, ry, color=color, name=label, opacity=cfg.circle_opacity))
 
         fig.add_trace(go.Scatter(
@@ -452,12 +439,14 @@ def _build_compare_dispersion_figure(
             range=[bounds["x_min"], bounds["x_max"]],
             zeroline=False,
             showgrid=True,
+            gridcolor="rgba(180, 190, 205, 0.35)",
         ),
         yaxis=dict(
             title="Lateral (yd) — right miss down",
             range=[-bounds["y_lim"], bounds["y_lim"]],
             zeroline=False,
             showgrid=True,
+            gridcolor="rgba(180, 190, 205, 0.35)",
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
@@ -510,7 +499,7 @@ def render_dispersion(
         with c2:
             fairway_width = st.slider(
                 "Fairway width (yd)",
-                30, 140, 60, 1,
+                30, 140, 70, 1,
                 key=f"{key_prefix}_fairway_width",
             )
 
@@ -521,10 +510,10 @@ def render_dispersion(
                 index=1,
                 key=f"{key_prefix}_end_mode",
             )
-        
+
         with c4:
             circle_mode = st.selectbox(
-                "Dispersion circle",
+                "Dispersion ellipse",
                 ["p80", "p90", "p95", "1sigma", "2sigma"],
                 index=3,
                 key=f"{key_prefix}_circle_mode",
@@ -546,7 +535,7 @@ def render_dispersion(
         with c2:
             fairway_width = st.slider(
                 "Fairway width (yd)",
-                30, 140, 60, 1,
+                30, 140, 70, 1,
                 key=f"{key_prefix}_fairway_width",
             )
 
@@ -554,15 +543,15 @@ def render_dispersion(
             end_mode = st.selectbox(
                 "Fairway length",
                 ["p95", "max"],
-                index=0,
+                index=1,
                 key=f"{key_prefix}_end_mode",
             )
 
         with c4:
             circle_mode = st.selectbox(
-                "Dispersion circle",
+                "Dispersion ellipse",
                 ["p80", "p90", "p95", "1sigma", "2sigma"],
-                index=1,
+                index=3,
                 key=f"{key_prefix}_circle_mode",
             )
 
@@ -575,6 +564,8 @@ def render_dispersion(
         fairway_end_mode=end_mode,
         right_miss_down=True,
         circle_mode=circle_mode,
+        keep_proportions=False,
+        circle_min_radius_yd=3.5,
     )
 
     fig, df_plot = _build_dispersion_figure(canon_df, cfg=cfg, club_filter=club)
@@ -654,7 +645,7 @@ def render_compare_dispersion(
     with c2:
         fairway_width = st.slider(
             "Fairway width (yd)",
-            30, 140, 60, 1,
+            30, 140, 70, 1,
             key=f"{key_prefix}_fairway_width",
         )
 
@@ -662,15 +653,15 @@ def render_compare_dispersion(
         end_mode = st.selectbox(
             "Fairway length",
             ["p95", "max"],
-            index=1,   # default to "max"
+            index=1,
             key=f"{key_prefix}_end_mode",
         )
 
     with c4:
         circle_mode = st.selectbox(
-            "Dispersion circle",
+            "Dispersion ellipse",
             ["p80", "p90", "p95", "1sigma", "2sigma"],
-            index=3,   # default to "1sigma"
+            index=3,
             key=f"{key_prefix}_circle_mode",
         )
 

@@ -26,8 +26,8 @@ class DispersionConfig:
     show_target_marker: bool = True
     keep_proportions: bool = False
 
-    circle_mode: str = "p90"
-    circle_min_radius_yd: float = 5.0
+    circle_mode: str = "1sigma"
+    circle_min_radius_yd: float = 3.5
     circle_opacity: float = 0.18
 
 
@@ -655,7 +655,7 @@ def render_compare_dispersion(
         end_mode = st.selectbox(
             "Fairway length",
             ["p95", "max"],
-            index=0,
+            index=1,   # default to "max"
             key=f"{key_prefix}_end_mode",
         )
 
@@ -663,7 +663,7 @@ def render_compare_dispersion(
         circle_mode = st.selectbox(
             "Dispersion circle",
             ["p80", "p90", "p95", "1sigma", "2sigma"],
-            index=1,
+            index=3,   # default to "1sigma"
             key=f"{key_prefix}_circle_mode",
         )
 
@@ -673,6 +673,8 @@ def render_compare_dispersion(
         fairway_end_mode=end_mode,
         right_miss_down=True,
         circle_mode=circle_mode,
+        keep_proportions=False,
+        circle_min_radius_yd=3.5,
     )
 
     club = None if club_filter == "ALL" else club_filter

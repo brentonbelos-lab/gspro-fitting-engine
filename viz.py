@@ -149,39 +149,37 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
 def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: DispersionConfig):
     x_min = bounds["x_min"]
     x_max = bounds["x_max"]
-    fw_x0 = bounds["fw_x0"]
-    fw_x1 = bounds["fw_x1"]
 
-    rough_half = cfg.fairway_width_yd * 1.8
-    firstcut_half = cfg.fairway_width_yd * 1.25
     fw_half = cfg.fairway_width_yd / 2.0
+    rough_half = fw_half * 1.9
+    deep_rough_half = fw_half * 2.8
 
-    # Outer landing area
+    # Deep rough
     fig.add_shape(
         type="rect",
-        x0=fw_x0, x1=fw_x1,
-        y0=-rough_half, y1=rough_half,
+        x0=x_min, x1=x_max,
+        y0=-deep_rough_half, y1=deep_rough_half,
         line=dict(width=0),
-        fillcolor="rgba(34, 139, 34, 0.06)",
+        fillcolor="rgba(34, 139, 34, 0.05)",
         layer="below",
     )
 
-    # First cut
+    # Rough
     fig.add_shape(
         type="rect",
-        x0=fw_x0, x1=fw_x1,
-        y0=-firstcut_half, y1=firstcut_half,
+        x0=x_min, x1=x_max,
+        y0=-rough_half, y1=rough_half,
         line=dict(width=0),
-        fillcolor="rgba(34, 139, 34, 0.12)",
+        fillcolor="rgba(34, 139, 34, 0.10)",
         layer="below",
     )
 
     # Fairway
     fig.add_shape(
         type="rect",
-        x0=fw_x0, x1=fw_x1,
+        x0=x_min, x1=x_max,
         y0=-fw_half, y1=fw_half,
-        line=dict(color="rgba(20,80,30,0.24)", width=1),
+        line=dict(color="rgba(20,80,30,0.20)", width=1),
         fillcolor="rgba(30,150,70,0.18)",
         layer="below",
     )
@@ -512,7 +510,7 @@ def render_dispersion(
         with c2:
             fairway_width = st.slider(
                 "Fairway width (yd)",
-                30, 140, 70, 1,
+                30, 140, 60, 1,
                 key=f"{key_prefix}_fairway_width",
             )
 
@@ -548,7 +546,7 @@ def render_dispersion(
         with c2:
             fairway_width = st.slider(
                 "Fairway width (yd)",
-                30, 140, 70, 1,
+                30, 140, 60, 1,
                 key=f"{key_prefix}_fairway_width",
             )
 
@@ -656,7 +654,7 @@ def render_compare_dispersion(
     with c2:
         fairway_width = st.slider(
             "Fairway width (yd)",
-            30, 140, 70, 1,
+            30, 140, 60, 1,
             key=f"{key_prefix}_fairway_width",
         )
 

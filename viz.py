@@ -34,44 +34,45 @@ class DispersionConfig:
 # -----------------------------
 # Helpers
 # -----------------------------
-def _club_circle_radius(dx: np.ndarray, dy: np.ndarray, mode: str) -> float:
-    r = np.sqrt(dx * dx + dy * dy)
-    r = r[np.isfinite(r)]
-    if r.size == 0:
-        return 0.0
+def _dispersion_ellipse_radii(dx: np.ndarray, dy: np.ndarray, mode: str) -> Tuple[float, float]:
+    dx = dx[np.isfinite(dx)]
+    dy = dy[np.isfinite(dy)]
+
+    if dx.size == 0 or dy.size == 0:
+        return 0.0, 0.0
 
     m = mode.lower().strip()
+
     if m.startswith("p") and len(m) >= 2:
         try:
             p = float(m[1:])
-            return float(np.nanpercentile(r, p))
+            rx = float(np.nanpercentile(np.abs(dx), p))
+            ry = float(np.nanpercentile(np.abs(dy), p))
+            return rx, ry
         except Exception:
             pass
 
-    if m == "1sigma":
-        sx = float(np.nanstd(dx, ddof=1)) if dx.size > 1 else float(np.nanstd(dx))
-        sy = float(np.nanstd(dy, ddof=1)) if dy.size > 1 else float(np.nanstd(dy))
-        return float(np.sqrt(sx * sx + sy * sy))
+    sx = float(np.nanstd(dx, ddof=1)) if dx.size > 1 else float(np.nanstd(dx))
+    sy = float(np.nanstd(dy, ddof=1)) if dy.size > 1 else float(np.nanstd(dy))
 
     if m == "2sigma":
-        sx = float(np.nanstd(dx, ddof=1)) if dx.size > 1 else float(np.nanstd(dx))
-        sy = float(np.nanstd(dy, ddof=1)) if dy.size > 1 else float(np.nanstd(dy))
-        return 2.0 * float(np.sqrt(sx * sx + sy * sy))
+        return 2.0 * sx, 2.0 * sy
 
-    return float(np.nanpercentile(r, 90))
+    # default to 1sigma
+    return sx, sy
 
 
-def _circle_trace(cx: float, cy: float, radius: float, color: str, name: str, opacity: float) -> go.Scatter:
+def _ellipse_trace(cx: float, cy: float, rx: float, ry: float, color: str, name: str, opacity: float) -> go.Scatter:
     t = np.linspace(0, 2 * np.pi, 181)
-    x = cx + radius * np.cos(t)
-    y = cy + radius * np.sin(t)
+    x = cx + rx * np.cos(t)
+    y = cy + ry * np.sin(t)
 
     return go.Scatter(
         x=x,
         y=y,
         mode="lines",
         line=dict(width=2, color=color),
-        name=f"{name} circle",
+        name=f"{name} ellipse",
         opacity=opacity,
         hoverinfo="skip",
         showlegend=False,
@@ -116,27 +117,33 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
     x_min = 0.0
     x_max_data = float(d["_x"].max())
 
-    # Fairway / landing area length can still use p95 or max
+    x_vals = d["_x"].values.astype(float)
+
     if cfg.fairway_end_mode == "p95":
-        fw_x1 = float(np.nanpercentile(d["_x"].values, 95))
-        fw_x1 = max(fw_x1, float(np.nanpercentile(d["_x"].values, 75)))
+        fw_x1 = float(np.nanpercentile(x_vals, 95))
+        fw_x1 = max(fw_x1, float(np.nanpercentile(x_vals, 75)))
     else:
         fw_x1 = x_max_data
 
-    # X-axis should always show from tee (0) to the furthest shot uploaded
+    # Start landing area near where shots actually begin to finish,
+    # not all the way from the tee.
+    fw_x0 = max(0.0, float(np.nanpercentile(x_vals, 10)) - 20.0)
+
+    # Ensure the landing area still has some visible length
+    if fw_x1 - fw_x0 < 40.0:
+        fw_x0 = max(0.0, fw_x1 - 40.0)
+
+    # Chart ends 20 yards after the furthest shot
     x_max = x_max_data + 20.0
 
     y_abs_max = float(np.nanmax(np.abs(d["_y"].values)))
-
-    # tighter vertical padding
     y_pad = max(5.0, y_abs_max * 0.12)
-    
-    # tighter scaling but still safe
     y_lim = y_abs_max + y_pad
 
     return {
         "x_min": x_min,
         "x_max": x_max,
+        "fw_x0": fw_x0,
         "fw_x1": fw_x1,
         "y_lim": y_lim,
     }
@@ -144,6 +151,8 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
 
 def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: DispersionConfig):
     x_min = bounds["x_min"]
+    x_max = bounds["x_max"]
+    fw_x0 = bounds["fw_x0"]
     fw_x1 = bounds["fw_x1"]
 
     rough_half = cfg.fairway_width_yd * 1.8
@@ -153,7 +162,7 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
     # Outer landing area
     fig.add_shape(
         type="rect",
-        x0=x_min, x1=fw_x1,
+        x0=fw_x0, x1=fw_x1,
         y0=-rough_half, y1=rough_half,
         line=dict(width=0),
         fillcolor="rgba(34, 139, 34, 0.06)",
@@ -163,7 +172,7 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
     # First cut
     fig.add_shape(
         type="rect",
-        x0=0, x1=fw_x1,
+        x0=fw_x0, x1=fw_x1,
         y0=-firstcut_half, y1=firstcut_half,
         line=dict(width=0),
         fillcolor="rgba(34, 139, 34, 0.12)",
@@ -173,16 +182,16 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
     # Fairway
     fig.add_shape(
         type="rect",
-        x0=0, x1=fw_x1,
+        x0=fw_x0, x1=fw_x1,
         y0=-fw_half, y1=fw_half,
-        line=dict(color="rgba(20,80,30,0.30)", width=1),
-        fillcolor="rgba(30,150,70,0.22)",
+        line=dict(color="rgba(20,80,30,0.24)", width=1),
+        fillcolor="rgba(30,150,70,0.18)",
         layer="below",
     )
 
     if cfg.show_centerline:
         fig.add_trace(go.Scatter(
-            x=[x_min, bounds["x_max"]],
+            x=[x_min, x_max],
             y=[0, 0],
             mode="lines",
             line=dict(dash="dash", width=1),
@@ -191,6 +200,7 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
             opacity=0.45,
             name="Centerline",
         ))
+
 
 def _build_hover_payload(d: pd.DataFrame):
     hover_bits: List[str] = []
@@ -309,10 +319,11 @@ def _build_dispersion_figure(
         dx = (dc["_x"].values - cx).astype(float)
         dy = (dc["_y"].values - cy).astype(float)
 
-        rad = _club_circle_radius(dx, dy, cfg.circle_mode)
-        rad = max(rad, cfg.circle_min_radius_yd)
-
-        fig.add_trace(_circle_trace(cx, cy, rad, color=color, name=str(club), opacity=cfg.circle_opacity))
+        rx, ry = _dispersion_ellipse_radii(dx, dy, cfg.circle_mode)
+        rx = max(rx, cfg.circle_min_radius_yd)
+        ry = max(ry, cfg.circle_min_radius_yd)
+        
+        fig.add_trace(_ellipse_trace(cx, cy, rx, ry, color=color, name=str(club), opacity=cfg.circle_opacity))
 
         fig.add_trace(go.Scatter(
             x=[cx],
@@ -324,7 +335,7 @@ def _build_dispersion_figure(
                 f"<b>{club} mean</b><br>"
                 "Downrange: %{x:.1f} yd<br>"
                 "Lateral: %{y:.1f} yd<br>"
-                f"Circle radius ({cfg.circle_mode}): {rad:.1f} yd"
+                f"Dispersion ellipse ({cfg.circle_mode}): {rx:.1f} yd x {ry:.1f} yd"
                 "<extra></extra>"
             ),
         ))
@@ -408,10 +419,11 @@ def _build_compare_dispersion_figure(
         cy = float(d["_y"].mean())
         dx = (d["_x"].values - cx).astype(float)
         dy = (d["_y"].values - cy).astype(float)
-        rad = _club_circle_radius(dx, dy, cfg.circle_mode)
-        rad = max(rad, cfg.circle_min_radius_yd)
-
-        fig.add_trace(_circle_trace(cx, cy, rad, color=color, name=label, opacity=cfg.circle_opacity))
+        rx, ry = _dispersion_ellipse_radii(dx, dy, cfg.circle_mode)
+        rx = max(rx, cfg.circle_min_radius_yd)
+        ry = max(ry, cfg.circle_min_radius_yd)
+        
+        fig.add_trace(_ellipse_trace(cx, cy, rx, ry, color=color, name=label, opacity=cfg.circle_opacity))
 
         fig.add_trace(go.Scatter(
             x=[cx],
@@ -423,7 +435,7 @@ def _build_compare_dispersion_figure(
                 f"<b>{label} mean</b><br>"
                 "Downrange: %{x:.1f} yd<br>"
                 "Lateral: %{y:.1f} yd<br>"
-                f"Circle radius ({cfg.circle_mode}): {rad:.1f} yd"
+                f"Dispersion ellipse ({cfg.circle_mode}): {rx:.1f} yd x {ry:.1f} yd"
                 "<extra></extra>"
             ),
             showlegend=False,

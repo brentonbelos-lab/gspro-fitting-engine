@@ -639,12 +639,17 @@ def _render_focus_picker(selected_clubs: List[str]):
     st.markdown('<div class="fc-card">', unsafe_allow_html=True)
     st.subheader("Choose Fitting Focus")
 
-    st.session_state["selected_focus_family"] = st.radio(
-        "What are we fitting today?",
-        families_present,
-        horizontal=True,
-        index=families_present.index(st.session_state["selected_focus_family"]),
-    )
+    # Only show family picker if there's more than one family available
+    if len(families_present) > 1:
+        st.session_state["selected_focus_family"] = st.radio(
+            "What are we fitting today?",
+            families_present,
+            horizontal=True,
+            index=families_present.index(st.session_state["selected_focus_family"]),
+        )
+    else:
+        st.session_state["selected_focus_family"] = families_present[0]
+        st.caption(f"Detected focus: {families_present[0]}")
 
     if st.session_state["selected_focus_family"] == "Driver":
         available = [c for c in selected_clubs if c == "DR"]
@@ -656,11 +661,17 @@ def _render_focus_picker(selected_clubs: List[str]):
     if st.session_state["selected_focus_club"] not in available:
         st.session_state["selected_focus_club"] = available[0]
 
-    st.session_state["selected_focus_club"] = st.selectbox(
-        "Choose club",
-        available,
-        index=available.index(st.session_state["selected_focus_club"]),
-    )
+    # Only show club picker if there's more than one club in the chosen family
+    if len(available) > 1:
+        st.session_state["selected_focus_club"] = st.selectbox(
+            "Choose club",
+            available,
+            index=available.index(st.session_state["selected_focus_club"]),
+        )
+    else:
+        st.session_state["selected_focus_club"] = available[0]
+        st.caption(f"Detected club: {available[0]}")
+
     st.markdown("</div>", unsafe_allow_html=True)
     return st.session_state["selected_focus_club"]
 

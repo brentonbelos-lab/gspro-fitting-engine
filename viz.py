@@ -511,7 +511,7 @@ def render_dispersion(
             end_mode = st.selectbox(
                 "Fairway length",
                 ["p95", "max"],
-                index=0,
+                index=1,
                 key=f"{key_prefix}_end_mode",
             )
 
@@ -519,7 +519,7 @@ def render_dispersion(
             circle_mode = st.selectbox(
                 "Dispersion circle",
                 ["p80", "p90", "p95", "1sigma", "2sigma"],
-                index=1,
+                index=3,
                 key=f"{key_prefix}_circle_mode",
             )
 

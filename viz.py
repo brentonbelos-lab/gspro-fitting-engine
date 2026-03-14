@@ -19,9 +19,6 @@ class DispersionConfig:
     fairway_end_mode: str = "p95"
     right_miss_down: bool = True
 
-    x_pad_pct: float = 0.08
-    y_pad_pct: float = 0.18
-
     show_centerline: bool = True
     show_target_marker: bool = True
     keep_proportions: bool = False
@@ -405,7 +402,7 @@ def _build_compare_dispersion_figure(
             x=d["_x"],
             y=d["_y"],
             mode="markers",
-            marker=dict(size=10, opacity=0.80, color=color),
+            marker=dict(size=8, opacity=0.80, color=color),
             name=label,
             hovertemplate=(
                 f"<b>{label}</b><br>"
@@ -429,7 +426,7 @@ def _build_compare_dispersion_figure(
             x=[cx],
             y=[cy],
             mode="markers",
-            marker=dict(size=7, color=color, symbol="diamond"),
+            marker=dict(size=6, color=color, symbol="diamond"),
             name=f"{label} mean",
             hovertemplate=(
                 f"<b>{label} mean</b><br>"

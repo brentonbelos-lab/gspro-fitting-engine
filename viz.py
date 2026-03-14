@@ -268,7 +268,7 @@ def _build_dispersion_figure(
         fig.add_trace(go.Scatter(
             x=[tx], y=[0],
             mode="markers",
-            marker=dict(size=10, symbol="x"),
+            marker=dict(size=8, symbol="x"),
             hovertemplate="Target<br>Downrange: %{x:.1f} yd<extra></extra>",
             showlegend=False,
             opacity=0.7,
@@ -301,7 +301,7 @@ def _build_dispersion_figure(
             x=dc["_x"],
             y=dc["_y"],
             mode="markers",
-            marker=dict(size=10, opacity=0.85, color=color),
+            marker=dict(size=8, opacity=0.82, color=color),
             name=str(club),
             customdata=customdata,
             hovertemplate=(
@@ -526,7 +526,7 @@ def render_dispersion(
                 index=1,
                 key=f"{key_prefix}_end_mode",
             )
-
+        
         with c4:
             circle_mode = st.selectbox(
                 "Dispersion circle",

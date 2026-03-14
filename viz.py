@@ -124,8 +124,7 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
         fw_x1 = x_max_data
 
     # X-axis should always show from tee (0) to the furthest shot uploaded
-    x_pad = max(8.0, x_max_data * cfg.x_pad_pct)
-    x_max = x_max_data + x_pad
+    x_max = x_max_data + 20.0
 
     y_abs_max = float(np.nanmax(np.abs(d["_y"].values)))
 

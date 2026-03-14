@@ -84,16 +84,6 @@ def safe_std(x: pd.Series) -> float:
     return float(x.dropna().std(ddof=1)) if x.dropna().shape[0] >= 2 else float("nan")
 
 
-def _rec(title: str, detail: str, why: str | None = None) -> str:
-    """
-    Cleaner, golfer-friendly recommendation tone.
-    """
-    text = f"**{title}** — {detail.strip()}"
-    if why:
-        text += f" This should help {why.strip()}."
-    return text
-
-
 # -----------------------------
 # Club normalization
 # -----------------------------
@@ -640,62 +630,62 @@ def build_driver_recommendations(
     if negative_aoa and low_launch:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Move the ball slightly forward and feel one small upward strike through impact.",
-            why="Low launch plus a downward attack angle usually means you are giving away carry distance.",
+            suggestion="Try moving the ball slightly forward and feel one small upward strike through impact.",
+            why="Your launch is a little low and the attack angle is working downward, which usually costs carry with the driver.",
             tone="green",
         )
     elif right_miss:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Use one simple feel only: square the face a little earlier through impact.",
-            why="Your right miss pattern suggests face control matters more than making a large swing change.",
+            suggestion="Keep the swing thought simple and focus on squaring the face a touch earlier through impact.",
+            why="The main pattern here is a right miss, so face control is likely more important than making a bigger motion change.",
             tone="yellow",
         )
     elif low_smash:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Prioritize centered strike over extra speed during your next session.",
-            why="Strike quality should improve both ball speed and dispersion.",
+            suggestion="For the next session, prioritize centered contact over trying to swing faster.",
+            why="Improving strike quality should give you better ball speed and tighter dispersion at the same time.",
             tone="yellow",
         )
     else:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Keep the current swing thought simple and repeatable.",
-            why="Your next gains are more likely to come from consistency than a major swing rebuild.",
+            suggestion="Stay with a simple, repeatable motion and keep chasing consistency.",
+            why="The next gain here is more likely to come from repeating your strike and start line than from rebuilding the swing.",
             tone="green",
         )
 
     if low_launch:
         if user_setup.brand.lower() == "titleist":
-            settings_text = f"Try adding loft in the hosel before changing flex. Example: test {user_setup.hosel_setting} against A2."
+            settings_text = f"Start by testing a little more loft in the hosel. A good first check would be comparing your current {user_setup.hosel_setting} setting against A2."
         else:
-            settings_text = f"Add loft slightly from your current setting ({user_setup.hosel_setting}) before testing a stiffer shaft."
+            settings_text = f"Start by adding a little loft from your current setting ({user_setup.hosel_setting}) before testing a stiffer shaft."
         driver_settings = RecommendationBlock(
             title="Driver Settings",
             suggestion=settings_text,
-            why="Your launch is below target, so loft is the safer first adjustment.",
+            why="Launch is sitting below the ideal window, so loft is the safest and most direct first adjustment.",
             tone="green",
         )
     elif right_miss:
         driver_settings = RecommendationBlock(
             title="Driver Settings",
-            suggestion=f"Test a slightly more upright or draw-help setting from {user_setup.hosel_setting}.",
-            why="Your miss pattern trends right, so a hosel tweak may help face presentation and start line.",
+            suggestion=f"Test a slightly more upright or draw-help setting from your current {user_setup.hosel_setting} position.",
+            why="Your pattern is drifting right, so a small hosel change may help start line and face presentation.",
             tone="yellow",
         )
     elif high_launch and high_spin:
         driver_settings = RecommendationBlock(
             title="Driver Settings",
             suggestion=f"Your current hosel setting is worth testing against a slightly lower-loft option from {user_setup.hosel_setting}.",
-            why="Launch and spin are high enough to justify a settings test.",
+            why="Both launch and spin are high enough that a lower-loft test is reasonable.",
             tone="yellow",
         )
     else:
         driver_settings = RecommendationBlock(
             title="Driver Settings",
-            suggestion=f"Keep your current hosel setting ({user_setup.hosel_setting}) for now.",
-            why="Your current data does not strongly demand a hosel change before strike consistency is confirmed.",
+            suggestion=f"Stay with your current hosel setting ({user_setup.hosel_setting}) for now.",
+            why="The current numbers do not strongly point to a hosel change before strike consistency is confirmed.",
             tone="green",
         )
 
@@ -704,37 +694,37 @@ def build_driver_recommendations(
 
     if wide_dispersion or (fairway_hit_pct is not None and fairway_hit_pct < 60):
         if user_setup.brand.lower() == "titleist" and user_setup.model.upper() == "TSR3":
-            equipment_lines.append("Consider a more forgiving head such as TSR2 if you want help on mishits.")
+            equipment_lines.append("If you want more help on slight mishits, test a more forgiving head such as TSR2.")
             tone = "yellow"
         elif user_setup.brand.lower() == "ping" and "LST" in user_setup.model.upper():
-            equipment_lines.append("Consider moving from an LST head to a MAX-style head for more forgiveness.")
+            equipment_lines.append("If forgiveness is the priority, consider testing a MAX-style head instead of the LST head.")
             tone = "yellow"
         else:
-            equipment_lines.append("A more forgiving, higher-MOI head may help more than a stiffer shaft.")
+            equipment_lines.append("A more forgiving, higher-MOI head may help more than changing shaft stiffness right away.")
             tone = "yellow"
 
     if low_launch and right_miss and playable_spin:
         if light_shaft:
-            equipment_lines.append("Test a heavier 60–65g shaft in the same flex before testing 6.5.")
+            equipment_lines.append("Before moving stiffer, test a heavier 60–65g shaft in the same flex.")
             tone = "green"
         else:
-            equipment_lines.append("Stay in the same flex first and test a different profile before moving stiffer.")
+            equipment_lines.append("Stay in the same flex first and test a different shaft profile before jumping stiffer.")
             tone = "green"
     elif high_spin and not low_launch and not right_miss and not np.isnan(summary.club_speed_avg) and summary.club_speed_avg >= 103:
-        equipment_lines.append("A stiffer or lower-spin shaft can be tested, but only after launch and strike stay stable.")
+        equipment_lines.append("A stiffer or lower-spin shaft can be worth testing, but only after launch and strike are holding steady.")
         tone = "yellow"
     else:
         if not equipment_lines:
-            equipment_lines.append("Current shaft category looks reasonable; profile testing matters more than jumping flex.")
+            equipment_lines.append("Your current shaft category looks reasonable, so profile testing is likely more useful than making a big flex jump.")
             tone = "green"
 
     if low_launch and right_miss and playable_spin:
-        equipment_lines.append("Avoid moving stiffer first if launch is already low and the miss is right.")
+        equipment_lines.append("Avoid moving stiffer first if launch is already low and the common miss is right.")
 
     equipment_adjustment = RecommendationBlock(
         title="Equipment Adjustment",
         suggestion=" ".join(equipment_lines),
-        why="This recommendation prioritizes launch, forgiveness, and dispersion before stiffness.",
+        why="This recommendation puts launch window, forgiveness, and dispersion ahead of simply making the club feel stiffer.",
         tone=tone,
     )
 
@@ -788,37 +778,37 @@ def build_non_driver_recommendations(
     if low_launch and negative_aoa:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Keep the ball slightly farther forward and make one shallow sweeping move through impact.",
-            why=f"This {family.lower()} appears to need more launch, and a steeper hit usually works against that.",
+            suggestion="Try keeping the ball slightly farther forward and make a shallow, sweeping move through impact.",
+            why=f"This {family.lower()} wants a little more launch, and a steeper strike usually works against that.",
             tone="green",
         )
     elif right_miss:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Focus on one feel only: let the face close a touch earlier through impact.",
-            why=f"Your {family.lower()} pattern trends right, so face control is the simplest first change.",
+            suggestion="Keep the feel simple and focus on letting the face close just a touch earlier through impact.",
+            why=f"Your {family.lower()} pattern is leaking right, so face control is the cleanest first adjustment.",
             tone="yellow",
         )
     elif low_smash:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Prioritize centered strike over extra speed with this club.",
-            why=f"This {family.lower()} is likely losing ball speed from strike quality more than from raw speed.",
+            suggestion="Prioritize centered contact over trying to create more speed with this club.",
+            why=f"This {family.lower()} is probably giving away more ball speed through strike quality than through lack of speed.",
             tone="yellow",
         )
     else:
         swing = RecommendationBlock(
             title="Swing",
-            suggestion="Keep the motion stable and focus on repeating strike location.",
-            why=f"This {family.lower()} looks more likely to improve through consistency than through a major motion change.",
+            suggestion="Stay with a stable motion and keep focusing on repeatable strike location.",
+            why=f"This {family.lower()} is more likely to improve through consistency than through a major swing change.",
             tone="green",
         )
 
     if low_launch:
         if hosel_setting:
-            settings_text = f"Test a slightly higher-loft setting from {hosel_setting} before changing shaft stiffness."
+            settings_text = f"Start by testing a slightly higher-loft setting from your current {hosel_setting} position before changing shaft stiffness."
         else:
-            settings_text = "Test a slightly higher-loft setting before changing shaft stiffness."
+            settings_text = "Start by testing a slightly higher-loft setting before changing shaft stiffness."
         settings = RecommendationBlock(
             title="Club Settings",
             suggestion=settings_text,
@@ -827,31 +817,31 @@ def build_non_driver_recommendations(
         )
     elif right_miss:
         if hosel_setting:
-            settings_text = f"Test a slightly more upright or draw-help setting from {hosel_setting}."
+            settings_text = f"Test a slightly more upright or draw-help setting from your current {hosel_setting} setting."
         else:
             settings_text = "Test a slightly more upright or draw-help setting."
         settings = RecommendationBlock(
             title="Club Settings",
             suggestion=settings_text,
-            why=f"Your miss pattern trends right, so start-line and face presentation are worth adjusting first.",
+            why=f"The miss pattern is trending right, so start line and face presentation are worth adjusting first.",
             tone="yellow",
         )
     elif high_launch and high_spin:
         if hosel_setting:
-            settings_text = f"Test a slightly lower-loft setting from {hosel_setting}."
+            settings_text = f"Test a slightly lower-loft setting from your current {hosel_setting} position."
         else:
             settings_text = "Test a slightly lower-loft setting."
         settings = RecommendationBlock(
             title="Club Settings",
             suggestion=settings_text,
-            why=f"Launch and spin are both above the target window for this {family.lower()}.",
+            why=f"Launch and spin are both sitting above the target window for this {family.lower()}.",
             tone="yellow",
         )
     else:
         settings = RecommendationBlock(
             title="Club Settings",
-            suggestion=f"Keep the current setting{f' ({hosel_setting})' if hosel_setting else ''} for now.",
-            why=f"This {family.lower()} does not strongly demand a settings change before strike and gapping are confirmed.",
+            suggestion=f"Stay with the current setting{f' ({hosel_setting})' if hosel_setting else ''} for now.",
+            why=f"This {family.lower()} does not strongly call for a settings change before strike quality and gapping are confirmed.",
             tone="green",
         )
 
@@ -860,19 +850,19 @@ def build_non_driver_recommendations(
 
     if family == "Fairway Wood":
         if low_launch and (low_spin or not high_spin):
-            equipment_lines.append("Consider more loft or a more launch-friendly fairway wood setup before testing a stiffer shaft.")
+            equipment_lines.append("Consider a little more loft or a more launch-friendly fairway wood setup before moving to a stiffer shaft.")
             tone = "green"
         if wide_dispersion:
-            equipment_lines.append("A more forgiving fairway wood head may help on slight strike misses.")
+            equipment_lines.append("A more forgiving fairway wood head may help on slight strike misses and tighten the pattern.")
             tone = "yellow"
         if right_miss and shaft_weight_g is not None and shaft_weight_g < 70:
-            equipment_lines.append("A slightly heavier fairway shaft in the same flex may improve tempo and face control.")
+            equipment_lines.append("A slightly heavier fairway shaft in the same flex may help tempo and face control.")
             tone = "green"
         elif right_miss:
             equipment_lines.append("Test a smoother or more neutral shaft profile before moving stiffer.")
             tone = "yellow"
         if high_spin and not low_launch:
-            equipment_lines.append("If the ball flight climbs too much, test a slightly lower-spin profile only after launch stays playable.")
+            equipment_lines.append("If the flight is climbing too much, test a slightly lower-spin profile only after launch stays playable.")
             tone = "yellow"
 
     elif family == "Hybrid":
@@ -880,20 +870,20 @@ def build_non_driver_recommendations(
             equipment_lines.append("Consider a little more loft or a more launch-friendly hybrid setup before changing flex.")
             tone = "green"
         if right_miss:
-            equipment_lines.append("If this hybrid leaks right, test a slightly more upright setting or a profile that is easier to square.")
+            equipment_lines.append("If this hybrid tends to leak right, test a slightly more upright setting or a profile that is easier to square.")
             tone = "yellow"
         if left_miss:
-            equipment_lines.append("If this hybrid turns over too much, keep the shaft profile stable and test a more neutral setting first.")
+            equipment_lines.append("If this hybrid wants to turn over too much, keep the shaft profile stable and test a more neutral setting first.")
             tone = "yellow"
         if wide_dispersion:
-            equipment_lines.append("A more forgiving hybrid head or slightly heavier shaft may help control start line.")
+            equipment_lines.append("A more forgiving hybrid head or a slightly heavier shaft may help control the start line.")
             tone = "yellow"
         if high_spin and high_launch:
-            equipment_lines.append("If trajectory is too floaty, test a slightly flatter or lower-spin setup after strike quality is confirmed.")
+            equipment_lines.append("If the flight feels too floaty, test a slightly flatter or lower-spin setup after strike quality is confirmed.")
             tone = "yellow"
 
     if not equipment_lines:
-        equipment_lines.append("Current equipment category looks reasonable; confirm gapping and strike consistency before making a bigger change.")
+        equipment_lines.append("Your current equipment category looks reasonable, so confirm gapping and strike consistency before making a bigger change.")
         tone = "green"
 
     equipment = RecommendationBlock(

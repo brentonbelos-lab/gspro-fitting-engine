@@ -1178,67 +1178,67 @@ else:
 
     st.markdown('<div class="fc-card"><h3>Side-by-Side Metrics</h3>', unsafe_allow_html=True)
 
-def _fmt_diff(val, decimals=1, suffix=""):
-    if val is None:
-        return "—"
-    try:
-        if np.isnan(val):
+    def _fmt_diff(val, decimals=1, suffix=""):
+        if val is None:
             return "—"
-    except Exception:
-        pass
-    return f"{val:+.{decimals}f}{suffix}"
-
-metric_df = pd.DataFrame(
-    {
-        "Metric": [
-            "Shots", "Club Speed", "Ball Speed", "Smash",
-            "Carry", "Total", "Launch", "Spin", "AoA",
-            "Avg Abs Offline", "Fairway %"
-        ],
-        "Setup A": [
-            a.shots,
-            _fmt(a.club_speed, 1),
-            _fmt(a.ball_speed, 1),
-            _fmt(a.smash, 2),
-            _fmt(a.carry, 1),
-            _fmt(a.total, 1),
-            _fmt(a.launch, 1),
-            _fmt(a.spin, 0),
-            _fmt(a.aoa, 1),
-            _fmt(a.offline, 1),
-            _fmt(a.fairway_pct, 0, "%"),
-        ],
-        "Setup B": [
-            b.shots,
-            _fmt(b.club_speed, 1),
-            _fmt(b.ball_speed, 1),
-            _fmt(b.smash, 2),
-            _fmt(b.carry, 1),
-            _fmt(b.total, 1),
-            _fmt(b.launch, 1),
-            _fmt(b.spin, 0),
-            _fmt(b.aoa, 1),
-            _fmt(b.offline, 1),
-            _fmt(b.fairway_pct, 0, "%"),
-        ],
-        "Difference (B - A)": [
-            _fmt_diff(b.shots - a.shots, 0),
-            _fmt_diff(b.club_speed - a.club_speed, 1),
-            _fmt_diff(b.ball_speed - a.ball_speed, 1),
-            _fmt_diff(b.smash - a.smash, 2),
-            _fmt_diff(b.carry - a.carry, 1),
-            _fmt_diff(b.total - a.total, 1),
-            _fmt_diff(b.launch - a.launch, 1),
-            _fmt_diff(b.spin - a.spin, 0),
-            _fmt_diff(b.aoa - a.aoa, 1),
-            _fmt_diff(b.offline - a.offline, 1),
-            _fmt_diff(b.fairway_pct - a.fairway_pct, 0, "%"),
-        ],
-    }
-)
-
-st.dataframe(metric_df, use_container_width=True, hide_index=True)
-st.markdown("</div>", unsafe_allow_html=True)
+        try:
+            if np.isnan(val):
+                return "—"
+        except Exception:
+            pass
+        return f"{val:+.{decimals}f}{suffix}"
+    
+    metric_df = pd.DataFrame(
+        {
+            "Metric": [
+                "Shots", "Club Speed", "Ball Speed", "Smash",
+                "Carry", "Total", "Launch", "Spin", "AoA",
+                "Avg Abs Offline", "Fairway %"
+            ],
+            "Setup A": [
+                a.shots,
+                _fmt(a.club_speed, 1),
+                _fmt(a.ball_speed, 1),
+                _fmt(a.smash, 2),
+                _fmt(a.carry, 1),
+                _fmt(a.total, 1),
+                _fmt(a.launch, 1),
+                _fmt(a.spin, 0),
+                _fmt(a.aoa, 1),
+                _fmt(a.offline, 1),
+                _fmt(a.fairway_pct, 0, "%"),
+            ],
+            "Setup B": [
+                b.shots,
+                _fmt(b.club_speed, 1),
+                _fmt(b.ball_speed, 1),
+                _fmt(b.smash, 2),
+                _fmt(b.carry, 1),
+                _fmt(b.total, 1),
+                _fmt(b.launch, 1),
+                _fmt(b.spin, 0),
+                _fmt(b.aoa, 1),
+                _fmt(b.offline, 1),
+                _fmt(b.fairway_pct, 0, "%"),
+            ],
+            "Difference (B - A)": [
+                _fmt_diff(b.shots - a.shots, 0),
+                _fmt_diff(b.club_speed - a.club_speed, 1),
+                _fmt_diff(b.ball_speed - a.ball_speed, 1),
+                _fmt_diff(b.smash - a.smash, 2),
+                _fmt_diff(b.carry - a.carry, 1),
+                _fmt_diff(b.total - a.total, 1),
+                _fmt_diff(b.launch - a.launch, 1),
+                _fmt_diff(b.spin - a.spin, 0),
+                _fmt_diff(b.aoa - a.aoa, 1),
+                _fmt_diff(b.offline - a.offline, 1),
+                _fmt_diff(b.fairway_pct - a.fairway_pct, 0, "%"),
+            ],
+        }
+    )
+    
+    st.dataframe(metric_df, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     winners = compare["winners"]
     st.markdown(

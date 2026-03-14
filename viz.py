@@ -128,8 +128,12 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
     x_max = x_max_data + x_pad
 
     y_abs_max = float(np.nanmax(np.abs(d["_y"].values)))
-    y_pad = max(6.0, y_abs_max * cfg.y_pad_pct)
-    y_lim = max(y_abs_max + y_pad, cfg.fairway_width_yd * 0.9)
+
+    # tighter vertical padding
+    y_pad = max(5.0, y_abs_max * 0.12)
+    
+    # tighter scaling but still safe
+    y_lim = y_abs_max + y_pad
 
     return {
         "x_min": x_min,

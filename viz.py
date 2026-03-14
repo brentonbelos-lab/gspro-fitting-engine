@@ -144,22 +144,23 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
 
 def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: DispersionConfig):
     x_min = bounds["x_min"]
-    x_max = bounds["x_max"]
     fw_x1 = bounds["fw_x1"]
 
     rough_half = cfg.fairway_width_yd * 1.8
     firstcut_half = cfg.fairway_width_yd * 1.25
     fw_half = cfg.fairway_width_yd / 2.0
 
+    # Outer landing area
     fig.add_shape(
         type="rect",
-        x0=x_min, x1=x_max,
+        x0=x_min, x1=fw_x1,
         y0=-rough_half, y1=rough_half,
         line=dict(width=0),
         fillcolor="rgba(34, 139, 34, 0.06)",
         layer="below",
     )
 
+    # First cut
     fig.add_shape(
         type="rect",
         x0=0, x1=fw_x1,
@@ -169,6 +170,7 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
         layer="below",
     )
 
+    # Fairway
     fig.add_shape(
         type="rect",
         x0=0, x1=fw_x1,
@@ -180,7 +182,7 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
 
     if cfg.show_centerline:
         fig.add_trace(go.Scatter(
-            x=[x_min, x_max],
+            x=[x_min, bounds["x_max"]],
             y=[0, 0],
             mode="lines",
             line=dict(dash="dash", width=1),
@@ -189,7 +191,6 @@ def _add_course_layers(fig: go.Figure, bounds: Dict[str, float], cfg: Dispersion
             opacity=0.45,
             name="Centerline",
         ))
-
 
 def _build_hover_payload(d: pd.DataFrame):
     hover_bits: List[str] = []

@@ -45,98 +45,178 @@ st.caption("A cleaner fitter workflow: one club at a time, clearer next steps, e
 st.markdown(
     """
     <style>
-    :root {
-        --fc-blue: #1f77d0;
-        --fc-blue-dark: #103e6e;
-        --fc-blue-soft: #eff6ff;
-        --fc-border: #d7e6f7;
-        --fc-text: #16324f;
-        --fc-green-bg: #edf9f1;
-        --fc-green-border: #87d4a1;
-        --fc-yellow-bg: #fff8e8;
-        --fc-yellow-border: #e8c96b;
-        --fc-red-bg: #fff1f1;
-        --fc-red-border: #e09a9a;
-        --fc-card-bg: #ffffff;
-        --fc-panel-bg: #f8fbff;
-    }
 
-    .fc-hero {
-        background: linear-gradient(135deg, #1f77d0 0%, #245f9c 100%);
-        color: white;
-        padding: 20px 24px;
-        border-radius: 18px;
-        margin-bottom: 16px;
-        box-shadow: 0 8px 24px rgba(16, 62, 110, 0.12);
-    }
+/* -----------------------------
+   Base Layout (BIG UX WIN)
+----------------------------- */
 
-    .fc-card {
-        background: var(--fc-card-bg);
-        border: 1px solid var(--fc-border);
-        border-radius: 16px;
-        padding: 16px 18px;
-        box-shadow: 0 4px 16px rgba(31, 119, 208, 0.06);
-        margin-bottom: 14px;
-    }
+.block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 2rem;
+    padding-left: 1.4rem;
+    padding-right: 1.4rem;
+    max-width: 1200px;
+}
 
-    .fc-card h3, .fc-card h4 {
-        margin-top: 0;
-        color: var(--fc-blue-dark);
-    }
+/* Reduce Streamlit vertical gaps */
+section.main > div {
+    gap: 0.7rem;
+}
 
-    .fc-rec-green, .fc-rec-yellow, .fc-rec-red {
-        border-radius: 16px;
-        padding: 16px 18px;
-        margin-bottom: 12px;
-        border: 2px solid;
-    }
+/* Tighten markdown spacing globally */
+p {
+    margin-bottom: 0.55rem;
+    line-height: 1.45;
+}
 
-    .fc-rec-green {
-        background: var(--fc-green-bg);
-        border-color: var(--fc-green-border);
-    }
+/* -----------------------------
+   FitCaddie Colors
+----------------------------- */
 
-    .fc-rec-yellow {
-        background: var(--fc-yellow-bg);
-        border-color: var(--fc-yellow-border);
-    }
+:root {
+    --fc-blue: #1f77d0;
+    --fc-blue-dark: #103e6e;
+    --fc-blue-soft: #eff6ff;
+    --fc-border: #d7e6f7;
+    --fc-text: #16324f;
+    --fc-green-bg: #edf9f1;
+    --fc-green-border: #87d4a1;
+    --fc-yellow-bg: #fff8e8;
+    --fc-yellow-border: #e8c96b;
+    --fc-red-bg: #fff1f1;
+    --fc-red-border: #e09a9a;
+    --fc-card-bg: #ffffff;
+    --fc-panel-bg: #f8fbff;
+}
 
-    .fc-rec-red {
-        background: var(--fc-red-bg);
-        border-color: var(--fc-red-border);
-    }
+/* -----------------------------
+   Hero
+----------------------------- */
 
-    .fc-status {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 999px;
-        font-size: 0.82rem;
-        font-weight: 700;
-        margin-bottom: 8px;
-    }
+.fc-hero {
+    background: linear-gradient(135deg, #1f77d0 0%, #245f9c 100%);
+    color: white;
+    padding: 18px 22px;
+    border-radius: 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 8px 24px rgba(16, 62, 110, 0.12);
+}
 
-    .fc-status-green {
-        background: #d9f3e2;
-        color: #17653a;
-    }
+/* -----------------------------
+   Cards (Cleaner + Tighter)
+----------------------------- */
 
-    .fc-status-yellow {
-        background: #fff0c8;
-        color: #7a5b00;
-    }
+.fc-card {
+    background: var(--fc-card-bg);
+    border: 1px solid var(--fc-border);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 14px rgba(31, 119, 208, 0.05);
+    margin-bottom: 12px;
+}
 
-    .fc-status-red {
-        background: #ffd7d7;
-        color: #8a1f1f;
-    }
+.fc-card h3, .fc-card h4 {
+    margin-top: 0;
+    margin-bottom: 0.6rem;
+    color: var(--fc-blue-dark);
+}
 
-    .fc-verdict {
-        background: var(--fc-blue-soft);
-        border: 2px solid var(--fc-blue);
-        border-radius: 16px;
-        padding: 16px 18px;
-        margin-bottom: 14px;
-    }
+/* Remove excess Streamlit spacing inside cards */
+.fc-card .element-container {
+    margin-bottom: 0.45rem;
+}
+
+/* -----------------------------
+   Recommendation Blocks
+----------------------------- */
+
+.fc-rec-green, .fc-rec-yellow, .fc-rec-red {
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    border: 2px solid;
+}
+
+.fc-rec-green {
+    background: var(--fc-green-bg);
+    border-color: var(--fc-green-border);
+}
+
+.fc-rec-yellow {
+    background: var(--fc-yellow-bg);
+    border-color: var(--fc-yellow-border);
+}
+
+.fc-rec-red {
+    background: var(--fc-red-bg);
+    border-color: var(--fc-red-border);
+}
+
+/* Status tag spacing improvement */
+.fc-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.fc-status-green {
+    background: #d9f3e2;
+    color: #17653a;
+}
+
+.fc-status-yellow {
+    background: #fff0c8;
+    color: #7a5b00;
+}
+
+.fc-status-red {
+    background: #ffd7d7;
+    color: #8a1f1f;
+}
+
+/* -----------------------------
+   Verdict Block
+----------------------------- */
+
+.fc-verdict {
+    background: var(--fc-blue-soft);
+    border: 2px solid var(--fc-blue);
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+/* -----------------------------
+   Metrics (Huge Visual Upgrade)
+----------------------------- */
+
+div[data-testid="metric-container"] {
+    background: #fafcff;
+    border: 1px solid #e6eef8;
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+}
+
+/* -----------------------------
+   Tabs (Cleaner Feel)
+----------------------------- */
+
+button[data-baseweb="tab"] {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+}
+
+/* -----------------------------
+   Optional Spacer Helper
+----------------------------- */
+
+.fc-gap {
+    height: 0.4rem;
+}
+
     </style>
     """,
     unsafe_allow_html=True,

@@ -904,6 +904,23 @@ def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: Driver
     _render_recommendation_cards(bundle)
 
 
+def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: DriverUserSetup):
+    summaries = summarize_by_club(driver_df)
+    if "DR" not in summaries:
+        st.info("No valid driver summary available.")
+        return None
+
+    offline_valid = driver_df["offline_yd"].dropna()
+    fairway_pct = float((offline_valid.abs() <= 15).mean() * 100.0) if len(offline_valid) else np.nan
+
+    bundle = build_driver_recommendations(
+        summary=summaries["DR"],
+        user_setup=driver_setup,
+        fairway_hit_pct=fairway_pct if not np.isnan(fairway_pct) else None,
+    )
+    return bundle
+
+
 def _render_non_driver_recommendations(
     focus_summary,
     hosel_configs: Dict[str, Dict],
@@ -923,6 +940,7 @@ def _render_non_driver_recommendations(
         shaft_flex=build_cfg.get("shaft_flex"),
         hosel_setting=build_cfg.get("hosel_setting", cfg.get("current_setting")),
     )
+    return bundle
 
     st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
     _render_recommendation_cards(bundle)
@@ -1020,65 +1038,69 @@ if analysis_mode == "Single Club Analysis":
 
     focus_club = _render_focus_picker(club_ids)
     focus_df = canon_df[canon_df["club_id"] == focus_club].copy()
-    
+
     summaries = summarize_by_club(focus_df)
     if focus_club not in summaries:
         st.warning("No valid data for the selected club.")
         st.stop()
-    
+
     focus_summary = summaries[focus_club]
-    
-    top1, top2 = st.columns([1.35, 1.0])
-    
-    with top1:
-        st.markdown('<div class="fc-card"><h3>Dispersion</h3>', unsafe_allow_html=True)
-        render_dispersion(focus_df, key_prefix="single_focus")
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with top2:
-        st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
-        _render_summary_cards(focus_summary)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-        if focus_club == "DR":
-            _render_driver_setup("single", "Driver Build")
-            _render_driver_recommendations(focus_df, _driver_setup_from_prefix("single"))
-    
-        elif focus_club.endswith("W"):
-            _render_non_driver_build("single_fw", "Fairway Wood Build", "Fairway Wood")
-    
-        elif focus_club.endswith("H"):
-            _render_non_driver_build("single_hy", "Hybrid Build", "Hybrid")
-    
+
     hosel_title = f"Hosel Settings — {focus_club}"
-    
     hosel_configs = _render_hosel_block(
         club_id=focus_club,
         title=hosel_title,
         k_loft_to_dynamic=k_loft_to_dynamic,
     )
-    
-    if focus_club.endswith("W"):
-        _render_non_driver_recommendations(
-            focus_summary,
-            hosel_configs,
-            _club_build_from_prefix("single_fw"),
-        )
-        
-    elif focus_club.endswith("H"):
-        _render_non_driver_recommendations(
-            focus_summary,
-            hosel_configs,
-            _club_build_from_prefix("single_hy"),
-        )
-    
+
+    recommendation_bundle = None
+
+    top1, top2 = st.columns([1.35, 1.0])
+
+    with top1:
+        st.markdown('<div class="fc-card"><h3>Dispersion</h3>', unsafe_allow_html=True)
+        render_dispersion(focus_df, key_prefix="single_focus")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with top2:
+        st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
+        _render_summary_cards(focus_summary)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if focus_club == "DR":
+            _render_driver_setup("single", "Driver Build")
+            recommendation_bundle = _render_driver_recommendations(
+                focus_df,
+                _driver_setup_from_prefix("single"),
+            )
+
+        elif focus_club.endswith("W"):
+            _render_non_driver_build("single_fw", "Fairway Wood Build", "Fairway Wood")
+            recommendation_bundle = _render_non_driver_recommendations(
+                focus_summary,
+                hosel_configs,
+                _club_build_from_prefix("single_fw"),
+            )
+
+        elif focus_club.endswith("H"):
+            _render_non_driver_build("single_hy", "Hybrid Build", "Hybrid")
+            recommendation_bundle = _render_non_driver_recommendations(
+                focus_summary,
+                hosel_configs,
+                _club_build_from_prefix("single_hy"),
+            )
+
+        if recommendation_bundle is not None:
+            st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3>', unsafe_allow_html=True)
+            _render_recommendation_cards(recommendation_bundle)
+            st.markdown("</div>", unsafe_allow_html=True)
+
     _render_advanced_analysis(
         club_id=focus_club,
         canon_df=focus_df,
         hosel_configs=hosel_configs,
         k_loft_to_dynamic=k_loft_to_dynamic,
     )
-
 
 # -----------------------------
 # Compare Driver Setups

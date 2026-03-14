@@ -116,14 +116,16 @@ def _compute_bounds(d: pd.DataFrame, cfg: DispersionConfig) -> Dict[str, float]:
     x_min = 0.0
     x_max_data = float(d["_x"].max())
 
+    # Fairway / landing area length can still use p95 or max
     if cfg.fairway_end_mode == "p95":
         fw_x1 = float(np.nanpercentile(d["_x"].values, 95))
         fw_x1 = max(fw_x1, float(np.nanpercentile(d["_x"].values, 75)))
     else:
         fw_x1 = x_max_data
 
-    x_pad = max(5.0, fw_x1 * cfg.x_pad_pct)
-    x_max = fw_x1 + x_pad
+    # X-axis should always show from tee (0) to the furthest shot uploaded
+    x_pad = max(8.0, x_max_data * cfg.x_pad_pct)
+    x_max = x_max_data + x_pad
 
     y_abs_max = float(np.nanmax(np.abs(d["_y"].values)))
     y_pad = max(6.0, y_abs_max * cfg.y_pad_pct)

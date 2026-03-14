@@ -55,7 +55,7 @@ st.markdown(
     padding-bottom: 2rem;
     padding-left: 1.4rem;
     padding-right: 1.4rem;
-    max-width: 1200px;
+    max-width: none;
 }
 
 /* Reduce Streamlit vertical gaps */

@@ -84,13 +84,13 @@ def safe_std(x: pd.Series) -> float:
     return float(x.dropna().std(ddof=1)) if x.dropna().shape[0] >= 2 else float("nan")
 
 
-def _tone_recommendation(title: str, detail: str, impact: str | None = None) -> str:
+def _rec(title: str, detail: str, why: str | None = None) -> str:
     """
-    Formats recommendation text in a cleaner, more user-friendly way.
+    Cleaner, golfer-friendly recommendation tone.
     """
     text = f"**{title}** — {detail.strip()}"
-    if impact:
-        text += f" This should help {impact.strip()}."
+    if why:
+        text += f" This should help {why.strip()}."
     return text
 
 

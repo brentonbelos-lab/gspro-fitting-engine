@@ -24,7 +24,7 @@ class DispersionConfig:
 
     show_centerline: bool = True
     show_target_marker: bool = True
-    keep_proportions: bool = True
+    keep_proportions: bool = False
 
     circle_mode: str = "p90"
     circle_min_radius_yd: float = 5.0
@@ -350,6 +350,8 @@ def _build_dispersion_figure(
 
     if cfg.keep_proportions:
         fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    else:
+        fig.update_yaxes(constrain="domain")
 
     return fig, d
 
@@ -451,6 +453,8 @@ def _build_compare_dispersion_figure(
 
     if cfg.keep_proportions:
         fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    else:
+        fig.update_yaxes(constrain="domain")
 
     return fig
 

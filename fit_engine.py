@@ -417,6 +417,160 @@ def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[flo
 
 
 # =========================================================
+# Anti-overreaction tuning profiles + helpers
+# =========================================================
+@dataclass(frozen=True)
+class ClubTuningProfile:
+    launch_buffer_deg: float
+    spin_buffer_rpm: float
+    peak_buffer_yd: float
+    descent_buffer_deg: float
+    ball_speed_buffer_mph: float
+    min_spec_signals: int
+    setup_good_min_checks: int
+    require_peak_descent_for_good_gate: bool
+
+
+def tuning_profile_for_club(club_id: str) -> ClubTuningProfile:
+    fam = club_family(club_id)
+
+    if fam == "Hybrid":
+        return ClubTuningProfile(1.2, 450, 3.0, 2.0, 2.0, 2, 4, True)
+
+    if fam == "Fairway Wood":
+        return ClubTuningProfile(1.0, 400, 2.5, 2.0, 2.0, 2, 4, True)
+
+    if fam == "Driver":
+        return ClubTuningProfile(0.8, 300, 2.5, 1.5, 2.0, 2, 3, False)
+
+    return ClubTuningProfile(0.8, 350, 2.0, 1.5, 2.0, 2, 3, False)
+
+
+def _buffered_ok(value: float, low: float, high: float, buffer_amt: float) -> bool:
+    if np.isnan(value):
+        return False
+    return (low - buffer_amt) <= value <= (high + buffer_amt)
+
+
+def _bias_from_face_delivery(summary: "ClubSummary") -> str:
+    if np.isnan(summary.offline_avg):
+        return "neutral"
+    if summary.offline_avg >= 7:
+        return "right"
+    if summary.offline_avg <= -7:
+        return "left"
+    return "neutral"
+
+
+def _spec_signal_counts(
+    summary: "ClubSummary",
+    club_id: str,
+    launch_lo: float,
+    launch_hi: float,
+    spin_lo: float,
+    spin_hi: float,
+    peak_lo: float,
+    peak_hi: float,
+    desc_lo: float,
+    desc_hi: float,
+) -> Dict[str, int]:
+
+    fam = club_family(club_id)
+
+    low_flight = 0
+    high_flight = 0
+    right_bias = 0
+    left_bias = 0
+
+    if not np.isnan(summary.vla_avg) and summary.vla_avg < launch_lo:
+        low_flight += 1
+    if not np.isnan(summary.spin_avg) and summary.spin_avg < spin_lo:
+        low_flight += 1
+
+    if fam in {"Fairway Wood", "Hybrid", "Iron", "Wedge"}:
+        if not np.isnan(summary.peak_height_avg) and summary.peak_height_avg < peak_lo:
+            low_flight += 1
+        if not np.isnan(summary.descent_avg) and summary.descent_avg < desc_lo:
+            low_flight += 1
+
+    if not np.isnan(summary.vla_avg) and summary.vla_avg > launch_hi:
+        high_flight += 1
+    if not np.isnan(summary.spin_avg) and summary.spin_avg > spin_hi:
+        high_flight += 1
+
+    if fam in {"Fairway Wood", "Hybrid", "Iron", "Wedge"}:
+        if not np.isnan(summary.peak_height_avg) and summary.peak_height_avg > peak_hi:
+            high_flight += 1
+        if not np.isnan(summary.descent_avg) and summary.descent_avg > desc_hi:
+            high_flight += 1
+
+    bias = _bias_from_face_delivery(summary)
+    if bias == "right":
+        right_bias += 1
+    elif bias == "left":
+        left_bias += 1
+
+    return {
+        "low_flight": low_flight,
+        "high_flight": high_flight,
+        "right_bias": right_bias,
+        "left_bias": left_bias,
+    }
+
+
+def _current_setup_good_eval(
+    summary: "ClubSummary",
+    club_id: str,
+    launch_lo: float,
+    launch_hi: float,
+    spin_lo: float,
+    spin_hi: float,
+    peak_lo: float,
+    peak_hi: float,
+    desc_lo: float,
+    desc_hi: float,
+    bs_lo: float,
+    bs_hi: float,
+):
+
+    profile = tuning_profile_for_club(club_id)
+    fam = club_family(club_id)
+
+    reasons = []
+
+    launch_ok = _buffered_ok(summary.vla_avg, launch_lo, launch_hi, profile.launch_buffer_deg)
+    spin_ok = _buffered_ok(summary.spin_avg, spin_lo, spin_hi, profile.spin_buffer_rpm)
+    peak_ok = _buffered_ok(summary.peak_height_avg, peak_lo, peak_hi, profile.peak_buffer_yd)
+    descent_ok = _buffered_ok(summary.descent_avg, desc_lo, desc_hi, profile.descent_buffer_deg)
+    ball_speed_ok = _buffered_ok(summary.ball_speed_avg, bs_lo, bs_hi, profile.ball_speed_buffer_mph)
+
+    if launch_ok:
+        reasons.append("launch playable")
+    if spin_ok:
+        reasons.append("spin playable")
+    if ball_speed_ok or np.isnan(summary.ball_speed_avg):
+        reasons.append("ball speed reasonable")
+
+    if fam == "Driver":
+        if not np.isnan(summary.offline_std) and summary.offline_std <= 16:
+            reasons.append("dispersion playable")
+    else:
+        if not np.isnan(summary.offline_std) and summary.offline_std <= 14:
+            reasons.append("dispersion playable")
+
+    if profile.require_peak_descent_for_good_gate:
+        if peak_ok:
+            reasons.append("peak playable")
+        if descent_ok:
+            reasons.append("descent playable")
+    else:
+        if peak_ok:
+            reasons.append("peak playable")
+
+    return (len(reasons) >= profile.setup_good_min_checks), reasons
+
+
+# =========================================================
 # Hosel estimate with carry / height projection
 # =========================================================
 LAUNCH_FROM_DYNAMIC_WEIGHT = 0.85

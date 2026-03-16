@@ -25,17 +25,6 @@ def _extract_float(s: str) -> Optional[float]:
 
 
 def parse_dir_value(value) -> Optional[float]:
-    """
-    Parses strings like:
-      '11.4 R' -> +11.4
-      '11.4 L' -> -11.4
-      '2.6° U' -> +2.6
-      '2.6° D' -> -2.6
-      '3.2 I-O' -> +3.2
-      '3.2 O-I' -> -3.2
-      '2.0 O' -> +2.0 (open)
-      '2.0 C' -> -2.0 (closed)
-    """
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return None
     if isinstance(value, (int, float, np.integer, np.floating)):
@@ -97,11 +86,9 @@ def normalize_club_label(label: str) -> str:
 
     s = label.strip().upper()
 
-    # direct matches
     if s in {"DR", "PW", "GW", "SW", "LW", "PT"}:
         return s
 
-    # common GSPro style
     if s.startswith("W") and len(s) == 2 and s[1].isdigit():
         return f"{s[1]}W"
     if s.startswith("H") and len(s) == 2 and s[1].isdigit():
@@ -109,7 +96,6 @@ def normalize_club_label(label: str) -> str:
     if s.startswith("I") and len(s) == 2 and s[1].isdigit():
         return f"{s[1]}I"
 
-    # extra common naming support
     aliases = {
         "DRIVER": "DR",
         "3 WOOD": "3W",
@@ -285,7 +271,7 @@ def canonicalize(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
 
 
 # =========================================================
-# Target model helpers
+# Target model
 # =========================================================
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
@@ -295,8 +281,6 @@ def _interp(low_v: float, high_v: float, t: float) -> float:
     return low_v + (high_v - low_v) * t
 
 
-# Public benchmark anchors inspired by public TrackMan/LPGA-PGA style club tables.
-# Values are intentionally practical target anchors for fitting windows, not single perfect numbers.
 PGA_BASELINES: Dict[str, Dict[str, float]] = {
     "DR": {"club_speed": 113, "ball_speed": 167, "launch": 10.9, "spin": 2686, "peak_height": 32.0, "descent": 38.0, "carry": 275},
     "3W": {"club_speed": 107, "ball_speed": 158, "launch": 9.2, "spin": 3655, "peak_height": 30.0, "descent": 43.0, "carry": 243},
@@ -381,12 +365,7 @@ def metric_window(club_id: str, metric: str, target_value: float) -> Tuple[float
     fam = club_family(club_id)
 
     if metric == "launch":
-        if fam == "Driver":
-            tol = 1.8
-        elif fam in {"Fairway Wood", "Hybrid", "Iron"}:
-            tol = 1.8
-        else:
-            tol = 1.5
+        tol = 1.5 if fam == "Wedge" else 1.8
         return (target_value - tol, target_value + tol)
 
     if metric == "spin":
@@ -401,12 +380,8 @@ def metric_window(club_id: str, metric: str, target_value: float) -> Tuple[float
         return (target_value - tol, target_value + tol)
 
     if metric == "peak_height":
-        if fam == "Driver":
+        if fam in {"Driver", "Fairway Wood", "Hybrid"}:
             tol = 3.0
-        elif fam in {"Fairway Wood", "Hybrid"}:
-            tol = 3.0
-        elif fam == "Iron":
-            tol = 2.5
         else:
             tol = 2.5
         return (target_value - tol, target_value + tol)
@@ -431,14 +406,7 @@ def metric_window(club_id: str, metric: str, target_value: float) -> Tuple[float
     return (target_value, target_value)
 
 
-# =========================================================
-# Public helper retained for app.py compatibility
-# =========================================================
 def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[float, float]]:
-    """
-    Retains app.py compatibility.
-    Returns launch and spin windows only, but now driven by the upgraded target model.
-    """
     tgt = interpolated_targets_for_club(club_id, club_speed_mph)
     launch_lo, launch_hi = metric_window(club_id, "launch", tgt["launch"])
     spin_lo, spin_hi = metric_window(club_id, "spin", tgt["spin"])
@@ -449,7 +417,7 @@ def targets_for_club(club_id: str, club_speed_mph: float) -> Dict[str, Tuple[flo
 
 
 # =========================================================
-# Hosel estimate
+# Hosel estimate with carry / height projection
 # =========================================================
 LAUNCH_FROM_DYNAMIC_WEIGHT = 0.85
 
@@ -460,7 +428,33 @@ class LaunchSpinEstimate:
     launch_range_deg: Tuple[float, float]
     spin_change_rpm: int
     spin_range_rpm: Tuple[int, int]
+    carry_change_yd: float
+    carry_range_yd: Tuple[float, float]
+    peak_height_change_yd: float
+    peak_height_range_yd: Tuple[float, float]
     notes: str
+
+
+def _carry_center_per_loft(club_id: str) -> float:
+    fam = club_family(club_id)
+    if fam == "Driver":
+        return 4.0
+    if fam == "Fairway Wood":
+        return 3.5
+    if fam == "Hybrid":
+        return 3.0
+    return 2.5
+
+
+def _peak_height_center_per_loft(club_id: str) -> float:
+    fam = club_family(club_id)
+    if fam == "Driver":
+        return 2.5
+    if fam == "Fairway Wood":
+        return 3.0
+    if fam == "Hybrid":
+        return 3.0
+    return 2.0
 
 
 def estimate_launch_spin_change(
@@ -489,12 +483,30 @@ def estimate_launch_spin_change(
     spin_high = int(round(hi * delta_static_loft_deg))
     spin_range = (min(spin_low, spin_high), max(spin_low, spin_high))
 
+    carry_center = _carry_center_per_loft(club_id) * delta_static_loft_deg
+    carry_unc = max(2.0, abs(carry_center) * 0.5)
+    carry_range = (
+        round(carry_center - carry_unc, 1),
+        round(carry_center + carry_unc, 1),
+    )
+
+    peak_center = _peak_height_center_per_loft(club_id) * delta_static_loft_deg
+    peak_unc = max(1.5, abs(peak_center) * 0.5)
+    peak_range = (
+        round(peak_center - peak_unc, 1),
+        round(peak_center + peak_unc, 1),
+    )
+
     return LaunchSpinEstimate(
         launch_change_deg=launch_est,
         launch_range_deg=(launch_low, launch_high),
         spin_change_rpm=spin_est,
         spin_range_rpm=spin_range,
-        notes="These are estimates only. Real flight changes still depend on strike, face, and delivery.",
+        carry_change_yd=round(carry_center, 1),
+        carry_range_yd=carry_range,
+        peak_height_change_yd=round(peak_center, 1),
+        peak_height_range_yd=peak_range,
+        notes="These are directional estimates only. Actual changes still depend on strike quality, speed retention, and delivery.",
     )
 
 
@@ -589,6 +601,149 @@ def pick_one_hosel_setting(
         "current": current_setting,
         "recommended": {"setting": setting, "loft_delta": loft, "lie_delta": lie, "score": score},
     }
+
+
+# =========================================================
+# Shot shape detection
+# =========================================================
+@dataclass(frozen=True)
+class ShotShapeSummary:
+    start_line: str
+    curve: str
+    shape_label: str
+    shot_count_used: int
+
+
+def classify_shot_shape_row(row: pd.Series) -> str:
+    hla = pd.to_numeric(pd.Series([row.get("hla_deg")]), errors="coerce").iloc[0]
+    ftp = pd.to_numeric(pd.Series([row.get("face_to_path_deg")]), errors="coerce").iloc[0]
+    spin_axis = pd.to_numeric(pd.Series([row.get("spin_axis_deg")]), errors="coerce").iloc[0]
+
+    start = "center"
+    if not np.isnan(hla):
+        if hla >= 1.5:
+            start = "right"
+        elif hla <= -1.5:
+            start = "left"
+
+    curve = "straight"
+    if not np.isnan(ftp):
+        if ftp >= 1.5:
+            curve = "fade"
+        elif ftp <= -1.5:
+            curve = "draw"
+    elif not np.isnan(spin_axis):
+        if spin_axis >= 3.0:
+            curve = "fade"
+        elif spin_axis <= -3.0:
+            curve = "draw"
+
+    if start == "right" and curve == "fade":
+        return "Push Fade"
+    if start == "right" and curve == "draw":
+        return "Push Draw"
+    if start == "left" and curve == "fade":
+        return "Pull Fade"
+    if start == "left" and curve == "draw":
+        return "Pull Draw"
+    if start == "right" and curve == "straight":
+        return "Straight Block"
+    if start == "left" and curve == "straight":
+        return "Straight Pull"
+    if start == "center" and curve == "fade":
+        return "Straight Fade"
+    if start == "center" and curve == "draw":
+        return "Straight Draw"
+    return "Straight"
+
+
+def shot_shape_summary(df: pd.DataFrame) -> ShotShapeSummary:
+    if df.empty:
+        return ShotShapeSummary(start_line="Unknown", curve="Unknown", shape_label="Unknown", shot_count_used=0)
+
+    labels = df.apply(classify_shot_shape_row, axis=1)
+    valid = labels.dropna()
+    if valid.empty:
+        return ShotShapeSummary(start_line="Unknown", curve="Unknown", shape_label="Unknown", shot_count_used=0)
+
+    mode_label = valid.value_counts().idxmax()
+
+    start_map = {
+        "Push Fade": "Right",
+        "Push Draw": "Right",
+        "Straight Block": "Right",
+        "Pull Fade": "Left",
+        "Pull Draw": "Left",
+        "Straight Pull": "Left",
+        "Straight Fade": "On line",
+        "Straight Draw": "On line",
+        "Straight": "On line",
+    }
+    curve_map = {
+        "Push Fade": "Fade",
+        "Pull Fade": "Fade",
+        "Straight Fade": "Fade",
+        "Push Draw": "Draw",
+        "Pull Draw": "Draw",
+        "Straight Draw": "Draw",
+        "Straight Block": "Straight",
+        "Straight Pull": "Straight",
+        "Straight": "Straight",
+    }
+
+    return ShotShapeSummary(
+        start_line=start_map.get(mode_label, "Unknown"),
+        curve=curve_map.get(mode_label, "Unknown"),
+        shape_label=mode_label,
+        shot_count_used=int(len(valid)),
+    )
+
+
+# =========================================================
+# Distance potential
+# =========================================================
+@dataclass(frozen=True)
+class DistancePotential:
+    expected_carry_yd: float
+    actual_carry_yd: float
+    carry_gap_yd: float
+    status: str
+    message: str
+
+
+def distance_potential_for_summary(summary: "ClubSummary") -> DistancePotential:
+    tgt = interpolated_targets_for_club(summary.club_id, summary.club_speed_avg)
+    expected = float(tgt["carry"])
+    actual = float(summary.carry_avg) if not np.isnan(summary.carry_avg) else float("nan")
+
+    if np.isnan(actual):
+        return DistancePotential(
+            expected_carry_yd=round(expected, 1),
+            actual_carry_yd=float("nan"),
+            carry_gap_yd=float("nan"),
+            status="unknown",
+            message="Not enough carry data to estimate distance potential.",
+        )
+
+    gap = round(expected - actual, 1)
+
+    if gap <= 3:
+        status = "optimized"
+        message = "Carry looks close to optimized for this speed."
+    elif gap <= 8:
+        status = "small_gap"
+        message = f"You may be leaving about {gap:.0f} yards on the table."
+    else:
+        status = "meaningful_gap"
+        message = f"You may be leaving meaningful distance on the table ({gap:.0f}+ yards)."
+
+    return DistancePotential(
+        expected_carry_yd=round(expected, 1),
+        actual_carry_yd=round(actual, 1),
+        carry_gap_yd=gap,
+        status=status,
+        message=message,
+    )
 
 
 # =========================================================
@@ -802,7 +957,7 @@ def compare_driver_setups(
 
 
 # =========================================================
-# Recommendation engine internals
+# Recommendation internals
 # =========================================================
 def _classify(value: float, low: float, high: float) -> str:
     if np.isnan(value):
@@ -812,22 +967,6 @@ def _classify(value: float, low: float, high: float) -> str:
     if value > high:
         return "high"
     return "ok"
-
-
-def _tone_from_category(category: str) -> str:
-    if category in {"no_change", "hosel_add_loft", "focus_strike", "playable_no_major_change"}:
-        return "green"
-    if category in {"hosel_reduce_loft", "test_softer", "test_firmer", "test_more_loft_or_club_type"}:
-        return "yellow"
-    return "red"
-
-
-def _shot_confidence(n: int) -> str:
-    if n >= 18:
-        return "High confidence"
-    if n >= 10:
-        return "Moderate confidence"
-    return "Low confidence"
 
 
 def _driver_swing_note(summary: ClubSummary, ball_speed_low: bool, launch_off: bool) -> RecommendationBlock:
@@ -889,7 +1028,6 @@ def _non_driver_swing_note(summary: ClubSummary, family: str, ball_speed_low: bo
 
 
 def _settings_block(
-    summary: ClubSummary,
     family: str,
     hosel_setting: Optional[str],
     launch_status: str,
@@ -1130,7 +1268,6 @@ def build_driver_recommendations(
     )
 
     driver_settings = _settings_block(
-        summary=summary,
         family="Driver",
         hosel_setting=user_setup.hosel_setting,
         launch_status=launch_status,
@@ -1175,7 +1312,7 @@ def build_driver_recommendations(
 
 
 # =========================================================
-# Fairway / Hybrid / Iron / Wedge recommendation engine
+# Non-driver recommendation engine
 # =========================================================
 def build_non_driver_recommendations(
     summary: ClubSummary,
@@ -1210,7 +1347,6 @@ def build_non_driver_recommendations(
     )
 
     settings = _settings_block(
-        summary=summary,
         family=family,
         hosel_setting=hosel_setting,
         launch_status=launch_status,

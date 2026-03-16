@@ -1182,15 +1182,23 @@ def _non_driver_swing_note(summary: ClubSummary, family: str, ball_speed_low: bo
 
 
 def _settings_block(
-    family: str,
+    club_id: str,
     hosel_setting: Optional[str],
-    launch_status: str,
-    spin_status: str,
-    peak_status: str,
-    descent_status: str,
+    summary: ClubSummary,
+    launch_lo: float,
+    launch_hi: float,
+    spin_lo: float,
+    spin_hi: float,
+    peak_lo: float,
+    peak_hi: float,
+    desc_lo: float,
+    desc_hi: float,
+    current_setup_good: bool,
 ) -> RecommendationBlock:
+    family = club_family(club_id)
     adjustable = family in {"Driver", "Fairway Wood", "Hybrid"}
     current_txt = f" from your current {hosel_setting} setting" if hosel_setting else ""
+    profile = tuning_profile_for_club(club_id)
 
     if not adjustable:
         return RecommendationBlock(
@@ -1200,26 +1208,63 @@ def _settings_block(
             tone="green",
         )
 
-    if peak_status == "low" or launch_status == "low" or (family in {"Fairway Wood", "Hybrid"} and descent_status == "low"):
+    if current_setup_good:
         return RecommendationBlock(
             title="Club Settings",
-            suggestion=f"Test a slightly higher-loft or more upright hosel setting{current_txt} before changing shafts.",
-            why="This flight is too flat for the current speed window, so the easiest first lever is more loft and/or a friendlier setting.",
+            suggestion=f"Stay with the current setting{current_txt} for now.",
+            why="The flight is already in a playable enough window that a hosel change is not strongly justified.",
             tone="green",
         )
 
-    if peak_status == "high" or launch_status == "high" or spin_status == "high":
+    signal_counts = _spec_signal_counts(
+        summary=summary,
+        club_id=club_id,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+    )
+
+    if signal_counts["low_flight"] >= profile.min_spec_signals:
+        return RecommendationBlock(
+            title="Club Settings",
+            suggestion=f"Test a slightly higher-loft or more upright hosel setting{current_txt} before changing shafts.",
+            why="Multiple flight signals point to a flatter-than-ideal flight, so hosel is the easiest and most reversible first change.",
+            tone="green",
+        )
+
+    if signal_counts["high_flight"] >= profile.min_spec_signals:
         return RecommendationBlock(
             title="Club Settings",
             suggestion=f"Test a slightly lower-loft or flatter hosel setting{current_txt} before changing shafts.",
-            why="The flight is climbing too much and a settings change is the safest first move.",
+            why="Multiple flight signals point to a higher-than-ideal flight, so a small hosel change is the safest first lever.",
+            tone="yellow",
+        )
+
+    if signal_counts["right_bias"] >= profile.min_spec_signals:
+        return RecommendationBlock(
+            title="Club Settings",
+            suggestion=f"If your hosel allows it, test a slightly more upright or draw-friendlier setting{current_txt}.",
+            why="The miss pattern has enough right-bias signal to justify a small reversible setting test.",
+            tone="green",
+        )
+
+    if signal_counts["left_bias"] >= profile.min_spec_signals:
+        return RecommendationBlock(
+            title="Club Settings",
+            suggestion=f"If your hosel allows it, test a slightly flatter or fade-friendlier setting{current_txt}.",
+            why="The miss pattern has enough left-bias signal to justify a small reversible setting test.",
             tone="yellow",
         )
 
     return RecommendationBlock(
         title="Club Settings",
         suggestion=f"Stay with the current setting{current_txt} for now.",
-        why="The data does not make a strong case for a hosel change as the first move.",
+        why="A single number may be imperfect, but there is not enough agreement across the flight pattern to justify a hosel change.",
         tone="green",
     )
 
@@ -1227,30 +1272,29 @@ def _settings_block(
 def _equipment_block_driver(
     summary: ClubSummary,
     user_setup: DriverUserSetup,
-    launch_status: str,
-    spin_status: str,
-    peak_status: str,
-    descent_status: str,
+    current_setup_good: bool,
+    launch_lo: float,
+    launch_hi: float,
+    spin_lo: float,
+    spin_hi: float,
+    peak_lo: float,
+    peak_hi: float,
+    desc_lo: float,
+    desc_hi: float,
     ball_speed_status: str,
     fairway_hit_pct: Optional[float],
 ) -> RecommendationBlock:
-    current_setup_good = (
-        launch_status == "ok"
-        and spin_status == "ok"
-        and peak_status == "ok"
-        and descent_status == "ok"
-        and ball_speed_status != "low"
-    )
+    profile = tuning_profile_for_club("DR")
 
     if current_setup_good:
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="Your current shaft setup looks good. We do not see strong evidence here for moving stiffer or softer.",
-            why="The driver flight window is broadly healthy for this speed, so no major spec change stands out.",
+            suggestion="Your current driver setup looks good. We do not see strong evidence here for moving stiffer or softer.",
+            why="The driver is already in a playable enough launch and spin window, so no major spec change stands out.",
             tone="green",
         )
 
-    if ball_speed_status == "low" and peak_status == "ok" and spin_status == "ok":
+    if ball_speed_status == "low" and not np.isnan(summary.smash_avg) and summary.smash_avg < _smash_floor_driver(summary.club_speed_avg):
         return RecommendationBlock(
             title="Equipment Adjustment",
             suggestion="Do not rush into a shaft change yet.",
@@ -1258,19 +1302,32 @@ def _equipment_block_driver(
             tone="yellow",
         )
 
-    if peak_status == "low" and launch_status == "low":
+    signal_counts = _spec_signal_counts(
+        summary=summary,
+        club_id="DR",
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+    )
+
+    if signal_counts["low_flight"] >= profile.min_spec_signals:
         return RecommendationBlock(
             title="Equipment Adjustment",
             suggestion="There is more evidence here for added launch help than for added stiffness. Test hosel first, then a slightly softer or higher-launch profile only if needed.",
-            why="The flight is flatter than ideal for this speed window.",
+            why="The driver flight is flatter than ideal, but the simplest reversible change still comes first.",
             tone="green",
         )
 
-    if peak_status == "high" and (spin_status == "high" or launch_status == "high"):
+    if signal_counts["high_flight"] >= profile.min_spec_signals:
         return RecommendationBlock(
             title="Equipment Adjustment",
             suggestion="After hosel testing, a firmer or lower-launch profile could be worth testing.",
-            why="This is one of the clearer patterns for bringing height and spin down slightly.",
+            why="Multiple flight signals agree that the ball is climbing more than ideal.",
             tone="yellow",
         )
 
@@ -1284,9 +1341,9 @@ def _equipment_block_driver(
 
     return RecommendationBlock(
         title="Equipment Adjustment",
-        suggestion="Test before buying. Keep changes small and reversible first.",
-        why="The data shows some room to improve, but not enough to force an aggressive equipment recommendation.",
-        tone="yellow",
+        suggestion="Your current setup is close enough that we would test very cautiously before buying anything.",
+        why="There is not enough agreement in the data to justify an aggressive shaft recommendation.",
+        tone="green",
     )
 
 
@@ -1296,29 +1353,28 @@ def _equipment_block_non_driver(
     stated_loft_deg: Optional[float],
     shaft_weight_g: Optional[float],
     hosel_setting: Optional[str],
-    launch_status: str,
-    spin_status: str,
-    peak_status: str,
-    descent_status: str,
+    current_setup_good: bool,
+    launch_lo: float,
+    launch_hi: float,
+    spin_lo: float,
+    spin_hi: float,
+    peak_lo: float,
+    peak_hi: float,
+    desc_lo: float,
+    desc_hi: float,
     ball_speed_status: str,
 ) -> RecommendationBlock:
-    current_setup_good = (
-        launch_status == "ok"
-        and spin_status == "ok"
-        and (peak_status == "ok" or _is_nan(summary.peak_height_avg))
-        and (descent_status == "ok" or _is_nan(summary.descent_avg))
-        and ball_speed_status != "low"
-    )
+    profile = tuning_profile_for_club(summary.club_id)
 
     if current_setup_good:
         return RecommendationBlock(
             title="Equipment Adjustment",
             suggestion="Your current setup looks good. No strong equipment change stands out from this data.",
-            why="This club is already in a healthy flight window for its speed.",
+            why="This club is already in a healthy enough playable window for its speed.",
             tone="green",
         )
 
-    if ball_speed_status == "low" and peak_status != "low" and spin_status == "ok":
+    if ball_speed_status == "low" and not np.isnan(summary.smash_avg) and summary.smash_avg < 1.30:
         return RecommendationBlock(
             title="Equipment Adjustment",
             suggestion="We would not rush to a shaft change yet.",
@@ -1326,50 +1382,62 @@ def _equipment_block_non_driver(
             tone="yellow",
         )
 
+    signal_counts = _spec_signal_counts(
+        summary=summary,
+        club_id=summary.club_id,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+    )
+
     if family in {"Fairway Wood", "Hybrid"}:
-        if peak_status == "low" or descent_status == "low":
+        if signal_counts["low_flight"] >= profile.min_spec_signals:
             return RecommendationBlock(
                 title="Equipment Adjustment",
                 suggestion="Test more loft first. If the flight still stays too flat, then a softer or higher-launch shaft profile may be worth testing.",
-                why="Height and stopping power matter most in this category.",
+                why="Multiple signals agree the flight is flatter than ideal, and height / stopping power matter most in this category.",
                 tone="green",
             )
 
-        if peak_status == "high" and (spin_status == "high" or launch_status == "high"):
+        if signal_counts["high_flight"] >= profile.min_spec_signals:
             return RecommendationBlock(
                 title="Equipment Adjustment",
                 suggestion="After hosel testing, a firmer or lower-launch profile could be worth testing.",
-                why="The flight is climbing too much relative to speed.",
+                why="Multiple signals agree the flight is climbing too much relative to speed.",
                 tone="yellow",
             )
 
-        if peak_status == "low" and descent_status == "low" and launch_status == "low":
-            return RecommendationBlock(
-                title="Equipment Adjustment",
-                suggestion="This may be more of a loft or club-type issue than a shaft issue.",
-                why="The flight is too flat for scoring, even before worrying about finer shaft changes.",
-                tone="yellow",
-            )
+        return RecommendationBlock(
+            title="Equipment Adjustment",
+            suggestion="This setup is close enough that we would avoid a major spec recommendation from this sample alone.",
+            why="A small miss in one metric is not enough by itself to justify a shaft or head change.",
+            tone="green",
+        )
 
     if family == "Iron":
-        if descent_status == "low" or peak_status == "low":
+        if signal_counts["low_flight"] >= profile.min_spec_signals:
             return RecommendationBlock(
                 title="Equipment Adjustment",
-                suggestion="This iron flight is too flat for your speed. Look at loft, launch profile, or head design before assuming the current build is ideal.",
+                suggestion="This iron flight is a little too flat for your speed. Look at loft, launch profile, or head design before assuming the current build is ideal.",
                 why="Stopping power matters more than squeezing one more yard out of an iron.",
                 tone="yellow",
             )
 
-        if spin_status == "low":
+        if not np.isnan(summary.spin_avg) and summary.spin_avg < spin_lo:
             return RecommendationBlock(
                 title="Equipment Adjustment",
                 suggestion="The numbers suggest more help from launch/spin than from added stiffness.",
-                why="This looks more like a flat flight issue than a need for a firmer shaft.",
+                why="This looks more like a flat-flight issue than a need for a firmer shaft.",
                 tone="yellow",
             )
 
     if family == "Wedge":
-        if descent_status == "low" or spin_status == "low":
+        if signal_counts["low_flight"] >= profile.min_spec_signals or (not np.isnan(summary.spin_avg) and summary.spin_avg < spin_lo):
             return RecommendationBlock(
                 title="Equipment Adjustment",
                 suggestion="Check loft, ball choice, groove condition, and strike before making a shaft recommendation.",
@@ -1377,7 +1445,7 @@ def _equipment_block_non_driver(
                 tone="yellow",
             )
 
-    if shaft_weight_g is not None and not np.isnan(float(shaft_weight_g)) and shaft_weight_g < 60 and summary.offline_avg > 5:
+    if shaft_weight_g is not None and not np.isnan(float(shaft_weight_g)) and summary.offline_avg > 5:
         return RecommendationBlock(
             title="Equipment Adjustment",
             suggestion="A slightly heavier build may be worth testing before a big flex change.",
@@ -1388,8 +1456,8 @@ def _equipment_block_non_driver(
     return RecommendationBlock(
         title="Equipment Adjustment",
         suggestion="Test before buying. Start with the simplest and most reversible change first.",
-        why="There is a pattern worth testing, but not enough evidence to force a major purchase.",
-        tone="yellow",
+        why="There is a pattern worth monitoring, but not enough evidence to force a major purchase.",
+        tone="green",
     )
 
 
@@ -1409,34 +1477,56 @@ def build_driver_recommendations(
     desc_lo, desc_hi = metric_window("DR", "descent", tgt["descent"])
     bs_lo, bs_hi = metric_window("DR", "ball_speed", tgt["ball_speed"])
 
-    launch_status = _classify(summary.vla_avg, launch_lo, launch_hi)
-    spin_status = _classify(summary.spin_avg, spin_lo, spin_hi)
-    peak_status = _classify(summary.peak_height_avg, peak_lo, peak_hi)
-    descent_status = _classify(summary.descent_avg, desc_lo, desc_hi)
     ball_speed_status = _classify(summary.ball_speed_avg, bs_lo, bs_hi)
+
+    current_setup_good, good_reasons = _current_setup_good_eval(
+        summary=summary,
+        club_id="DR",
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+        bs_lo=bs_lo,
+        bs_hi=bs_hi,
+    )
 
     swing = _driver_swing_note(
         summary=summary,
         ball_speed_low=(ball_speed_status == "low"),
-        launch_off=(launch_status != "ok" or peak_status != "ok"),
+        launch_off=not current_setup_good,
     )
 
     driver_settings = _settings_block(
-        family="Driver",
+        club_id="DR",
         hosel_setting=user_setup.hosel_setting,
-        launch_status=launch_status,
-        spin_status=spin_status,
-        peak_status=peak_status,
-        descent_status=descent_status,
+        summary=summary,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+        current_setup_good=current_setup_good,
     )
 
     equipment_adjustment = _equipment_block_driver(
         summary=summary,
         user_setup=user_setup,
-        launch_status=launch_status,
-        spin_status=spin_status,
-        peak_status=peak_status,
-        descent_status=descent_status,
+        current_setup_good=current_setup_good,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
         ball_speed_status=ball_speed_status,
         fairway_hit_pct=fairway_hit_pct,
     )
@@ -1461,6 +1551,8 @@ def build_driver_recommendations(
             "target_peak_height": tgt["peak_height"],
             "target_descent": tgt["descent"],
             "fairway_hit_pct": fairway_hit_pct if fairway_hit_pct is not None else math.nan,
+            "current_setup_good": float(current_setup_good),
+            "good_reason_count": float(len(good_reasons)),
         },
     )
 
@@ -1488,11 +1580,22 @@ def build_non_driver_recommendations(
     desc_lo, desc_hi = metric_window(club_id, "descent", tgt["descent"])
     bs_lo, bs_hi = metric_window(club_id, "ball_speed", tgt["ball_speed"])
 
-    launch_status = _classify(summary.vla_avg, launch_lo, launch_hi)
-    spin_status = _classify(summary.spin_avg, spin_lo, spin_hi)
-    peak_status = _classify(summary.peak_height_avg, peak_lo, peak_hi)
-    descent_status = _classify(summary.descent_avg, desc_lo, desc_hi)
     ball_speed_status = _classify(summary.ball_speed_avg, bs_lo, bs_hi)
+
+    current_setup_good, good_reasons = _current_setup_good_eval(
+        summary=summary,
+        club_id=club_id,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+        bs_lo=bs_lo,
+        bs_hi=bs_hi,
+    )
 
     swing = _non_driver_swing_note(
         summary=summary,
@@ -1501,12 +1604,18 @@ def build_non_driver_recommendations(
     )
 
     settings = _settings_block(
-        family=family,
+        club_id=club_id,
         hosel_setting=hosel_setting,
-        launch_status=launch_status,
-        spin_status=spin_status,
-        peak_status=peak_status,
-        descent_status=descent_status,
+        summary=summary,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
+        current_setup_good=current_setup_good,
     )
 
     equipment = _equipment_block_non_driver(
@@ -1515,10 +1624,15 @@ def build_non_driver_recommendations(
         stated_loft_deg=stated_loft_deg,
         shaft_weight_g=shaft_weight_g,
         hosel_setting=hosel_setting,
-        launch_status=launch_status,
-        spin_status=spin_status,
-        peak_status=peak_status,
-        descent_status=descent_status,
+        current_setup_good=current_setup_good,
+        launch_lo=launch_lo,
+        launch_hi=launch_hi,
+        spin_lo=spin_lo,
+        spin_hi=spin_hi,
+        peak_lo=peak_lo,
+        peak_hi=peak_hi,
+        desc_lo=desc_lo,
+        desc_hi=desc_hi,
         ball_speed_status=ball_speed_status,
     )
 
@@ -1541,5 +1655,7 @@ def build_non_driver_recommendations(
             "target_spin": tgt["spin"],
             "target_peak_height": tgt["peak_height"],
             "target_descent": tgt["descent"],
+            "current_setup_good": float(current_setup_good),
+            "good_reason_count": float(len(good_reasons)),
         },
     )

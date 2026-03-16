@@ -47,10 +47,6 @@ st.caption("A cleaner fitter workflow: one club at a time, clearer next steps, e
 st.markdown(
     """
     <style>
-
-/* -----------------------------
-   Base Layout
------------------------------ */
 .block-container {
     padding-top: 2.2rem;
     padding-bottom: 2rem;
@@ -68,15 +64,11 @@ p {
     line-height: 1.45;
 }
 
-/* -----------------------------
-   FitCaddie Colors
------------------------------ */
 :root {
     --fc-blue: #1f77d0;
     --fc-blue-dark: #103e6e;
     --fc-blue-soft: #eff6ff;
     --fc-border: #d7e6f7;
-    --fc-text: #16324f;
     --fc-green-bg: #edf9f1;
     --fc-green-border: #87d4a1;
     --fc-yellow-bg: #fff8e8;
@@ -84,12 +76,8 @@ p {
     --fc-red-bg: #fff1f1;
     --fc-red-border: #e09a9a;
     --fc-card-bg: #ffffff;
-    --fc-panel-bg: #f8fbff;
 }
 
-/* -----------------------------
-   Hero
------------------------------ */
 .fc-hero {
     background: linear-gradient(135deg, #1f77d0 0%, #245f9c 100%);
     color: white;
@@ -99,9 +87,6 @@ p {
     box-shadow: 0 8px 24px rgba(16, 62, 110, 0.12);
 }
 
-/* -----------------------------
-   Cards
------------------------------ */
 .fc-card {
     background: var(--fc-card-bg);
     border: 1px solid var(--fc-border);
@@ -121,9 +106,6 @@ p {
     margin-bottom: 0.45rem;
 }
 
-/* -----------------------------
-   Recommendation Blocks
------------------------------ */
 .fc-rec-green, .fc-rec-yellow, .fc-rec-red {
     border-radius: 16px;
     padding: 14px 16px;
@@ -170,9 +152,6 @@ p {
     color: #8a1f1f;
 }
 
-/* -----------------------------
-   Verdict Block
------------------------------ */
 .fc-verdict {
     background: var(--fc-blue-soft);
     border: 2px solid var(--fc-blue);
@@ -181,9 +160,6 @@ p {
     margin-bottom: 12px;
 }
 
-/* -----------------------------
-   Metrics
------------------------------ */
 div[data-testid="metric-container"] {
     background: #fafcff;
     border: 1px solid #e6eef8;
@@ -191,9 +167,6 @@ div[data-testid="metric-container"] {
     border-radius: 12px;
 }
 
-/* -----------------------------
-   Tabs
------------------------------ */
 button[data-baseweb="tab"] {
     padding-top: 0.45rem;
     padding-bottom: 0.45rem;
@@ -203,7 +176,6 @@ button[data-baseweb="tab"] {
     color: #486581;
     font-size: 0.9rem;
 }
-
     </style>
     """,
     unsafe_allow_html=True,
@@ -222,7 +194,6 @@ def _init_state():
         "selected_focus_family": "Driver",
         "selected_focus_club": "DR",
 
-        # generic non-driver single build
         "single_nd_brand": "Titleist",
         "single_nd_model": "GT2",
         "single_nd_loft": 15.0,
@@ -231,7 +202,6 @@ def _init_state():
         "single_nd_shaft_weight": 80.0,
         "single_nd_shaft_flex": "6.0",
 
-        # single mode driver setup
         "single_driver_brand": "Titleist",
         "single_driver_model": "TSR3",
         "single_driver_loft": 10.0,
@@ -240,7 +210,6 @@ def _init_state():
         "single_driver_shaft_weight": 60.0,
         "single_driver_shaft_flex": "6.0",
 
-        # compare mode A
         "cmpA_driver_brand": "Titleist",
         "cmpA_driver_model": "TSR3",
         "cmpA_driver_loft": 10.0,
@@ -249,7 +218,6 @@ def _init_state():
         "cmpA_driver_shaft_weight": 60.0,
         "cmpA_driver_shaft_flex": "6.0",
 
-        # compare mode B
         "cmpB_driver_brand": "Titleist",
         "cmpB_driver_model": "TSR3",
         "cmpB_driver_loft": 10.0,
@@ -295,9 +263,8 @@ def _club_family_from_id(club_id: str) -> str:
 
 
 def _default_loft_for_club(club_id: str) -> float:
-    if club_id == "DR":
-        return 10.0
     mapping = {
+        "DR": 10.0,
         "2W": 13.0, "3W": 15.0, "4W": 16.5, "5W": 18.0, "7W": 21.0,
         "2H": 17.0, "3H": 19.0, "4H": 21.0, "5H": 24.0,
         "3I": 21.0, "4I": 24.0, "5I": 27.0, "6I": 30.0,
@@ -459,10 +426,6 @@ def _model_options_for_family(brand: str, family: str) -> List[str]:
     return ["Other"]
 
 
-def _driver_build_title() -> str:
-    return "Driver Build"
-
-
 def _render_driver_setup(prefix: str, title: str):
     st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
 
@@ -556,7 +519,6 @@ def _render_non_driver_build(prefix: str, title: str, club_id: str):
 
     st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
 
-    # set club-specific defaults when switching families/clubs
     current_loft = float(st.session_state.get(f"{prefix}_loft", _default_loft_for_club(club_id)))
     if abs(current_loft - 15.0) < 0.01 and family in {"Iron", "Wedge"}:
         st.session_state[f"{prefix}_loft"] = float(_default_loft_for_club(club_id))
@@ -613,7 +575,10 @@ def _render_non_driver_build(prefix: str, title: str, club_id: str):
             )
         else:
             st.session_state[f"{prefix}_hosel"] = ""
-            st.markdown('<div class="fc-subtle" style="padding-top:0.5rem;">No adjustable hosel input needed for this club.</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="fc-subtle" style="padding-top:0.5rem;">No adjustable hosel input needed for this club.</div>',
+                unsafe_allow_html=True,
+            )
 
     s1, s2, s3 = st.columns(3)
 
@@ -775,14 +740,7 @@ def _render_focus_picker(selected_clubs: List[str]):
     else:
         available = [c for c in selected_clubs if c in {"PW", "GW", "SW", "LW"}]
 
-    available = sorted(available, key=lambda x: (
-        0 if x == "DR" else
-        1 if x.endswith("W") else
-        2 if x.endswith("H") else
-        3 if x.endswith("I") else
-        4,
-        x
-    ))
+    available = sorted(available)
 
     if st.session_state["selected_focus_club"] not in available:
         st.session_state["selected_focus_club"] = available[0]
@@ -909,7 +867,7 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
             f"System ranges: loft={ranges.get('loft_range_deg')}, lie={ranges.get('lie_range_deg')}."
         )
     else:
-        st.caption("Choose a different proposed setting to see projected launch and spin changes.")
+        st.caption("Choose a different proposed setting to see projected launch, spin, carry, and height changes.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -927,35 +885,41 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
     return hosel_configs
 
 
-with st.expander("Advanced Analysis"):
-    st.markdown("### Limiting Factors")
-    lim: List[str] = []
+def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_configs: Dict[str, Dict], k_loft_to_dynamic: float):
+    summary = summarize_by_club(canon_df)[club_id]
+    t = targets_for_club(club_id, summary.club_speed_avg)
+    launch_lo, launch_hi = t["launch"]
+    spin_lo, spin_hi = t["spin"]
 
-    miss = miss_tendency(summary.offline_avg)
-    lim.append(f"Miss tendency: **{miss}**" if miss != "Unknown" else "Miss tendency: Unknown")
+    with st.expander("Advanced Analysis"):
+        st.markdown("### Limiting Factors")
+        lim: List[str] = []
 
-    shape = shot_shape_summary(canon_df[canon_df["club_id"] == club_id])
-    lim.append(f"Typical shot shape: **{shape.shape_label}**")
+        miss = miss_tendency(summary.offline_avg)
+        lim.append(f"Miss tendency: **{miss}**" if miss != "Unknown" else "Miss tendency: Unknown")
 
-    if club_id == "DR":
-        smash_msg = smash_flag_driver(summary.smash_avg, summary.club_speed_avg)
-        if smash_msg:
-            lim.append(smash_msg)
+        shape = shot_shape_summary(canon_df[canon_df["club_id"] == club_id])
+        lim.append(f"Typical shot shape: **{shape.shape_label}**")
 
-    if not np.isnan(summary.vla_avg) and (summary.vla_avg < launch_lo or summary.vla_avg > launch_hi):
-        lim.append(f"Launch window miss: {summary.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
+        if club_id == "DR":
+            smash_msg = smash_flag_driver(summary.smash_avg, summary.club_speed_avg)
+            if smash_msg:
+                lim.append(smash_msg)
 
-    if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
-        lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
+        if not np.isnan(summary.vla_avg) and (summary.vla_avg < launch_lo or summary.vla_avg > launch_hi):
+            lim.append(f"Launch window miss: {summary.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
+        if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
+            lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
 
-    dp = distance_potential_for_summary(summary)
-    lim.append(
-        f"Distance potential: expected carry **{dp.expected_carry_yd:.1f} yd**, "
-        f"actual **{dp.actual_carry_yd:.1f} yd**."
-    )
+        dp = distance_potential_for_summary(summary)
+        lim.append(
+            f"Distance potential: expected carry **{dp.expected_carry_yd:.1f} yd**, "
+            f"actual **{dp.actual_carry_yd:.1f} yd**."
+        )
 
-    for item in lim:
-        st.write("•", item)
+        for item in lim:
+            st.write("•", item)
+
         family = _club_family_from_id(club_id)
         if family in {"Driver", "Fairway Wood", "Hybrid"}:
             st.markdown("### Settings Recommendation")
@@ -1198,7 +1162,7 @@ if analysis_mode == "Single Club Analysis":
         st.markdown("</div>", unsafe_allow_html=True)
 
         if focus_club == "DR":
-            _render_driver_setup("single", _driver_build_title())
+            _render_driver_setup("single", "Driver Build")
             recommendation_bundle = _render_driver_recommendations(
                 focus_df,
                 _driver_setup_from_prefix("single"),
@@ -1421,4 +1385,4 @@ else:
     )
 
 st.divider()
-st.caption("Next smart upgrade: add face-to-path shot-shape labels like push fade, pull fade, push draw, and pull hook.")
+st.caption("Next smart upgrade: add a confidence label like high / moderate / low confidence to each recommendation set.")

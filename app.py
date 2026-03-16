@@ -887,7 +887,7 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
     cur_loft = getattr(cur_delta, "loft_deg", None)
     new_loft = getattr(new_delta, "loft_deg", None)
 
-        st.markdown("#### Projected Change")
+    st.markdown("#### Projected Change")
     if (cur_loft is not None) and (new_loft is not None) and (proposed_setting != current_setting):
         delta_static_loft = new_loft - cur_loft
         est = estimate_launch_spin_change(delta_static_loft, k_loft_to_dynamic, club_id)

@@ -934,7 +934,7 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
     spin_lo, spin_hi = t["spin"]
 
     with st.expander("Advanced Analysis"):
-    st.markdown("### Limiting Factors")
+        st.markdown("### Limiting Factors")
     lim: List[str] = []
 
     miss = miss_tendency(summary.offline_avg)

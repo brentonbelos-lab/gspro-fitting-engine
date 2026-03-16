@@ -927,14 +927,8 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
     return hosel_configs
 
 
-def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_configs: Dict[str, Dict], k_loft_to_dynamic: float):
-    summary = summarize_by_club(canon_df)[club_id]
-    t = targets_for_club(club_id, summary.club_speed_avg)
-    launch_lo, launch_hi = t["launch"]
-    spin_lo, spin_hi = t["spin"]
-
-    with st.expander("Advanced Analysis"):
-        st.markdown("### Limiting Factors")
+with st.expander("Advanced Analysis"):
+    st.markdown("### Limiting Factors")
     lim: List[str] = []
 
     miss = miss_tendency(summary.offline_avg)
@@ -950,6 +944,7 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
 
     if not np.isnan(summary.vla_avg) and (summary.vla_avg < launch_lo or summary.vla_avg > launch_hi):
         lim.append(f"Launch window miss: {summary.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
+
     if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
         lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
 
@@ -961,7 +956,6 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
 
     for item in lim:
         st.write("•", item)
-
         family = _club_family_from_id(club_id)
         if family in {"Driver", "Fairway Wood", "Hybrid"}:
             st.markdown("### Settings Recommendation")

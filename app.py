@@ -23,9 +23,11 @@ from fit_engine import (
     build_non_driver_recommendations,
     canonicalize,
     compare_driver_setups,
+    distance_potential_for_summary,
     estimate_launch_spin_change,
     miss_tendency,
     pick_one_hosel_setting,
+    shot_shape_summary,
     smash_flag_driver,
     summarize_by_club,
     targets_for_club,
@@ -672,7 +674,7 @@ def _render_recommendation_cards(bundle):
         )
 
 
-def _render_summary_cards(summary):
+def _render_summary_cards(summary, focus_df: pd.DataFrame):
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Club Speed", _fmt(summary.club_speed_avg, 1))
     c2.metric("Ball Speed", _fmt(summary.ball_speed_avg, 1))
@@ -690,6 +692,36 @@ def _render_summary_cards(summary):
     c10.metric("Descent", _fmt(getattr(summary, "descent_avg", np.nan), 1))
     c11.metric("Club Speed SD", _fmt(summary.club_speed_std, 1))
     c12.metric("Offline SD", _fmt(summary.offline_std, 1))
+
+    shape = shot_shape_summary(focus_df)
+    dp = distance_potential_for_summary(summary)
+
+    s1, s2 = st.columns(2)
+    with s1:
+        st.markdown(
+            f"""
+            <div class="fc-card" style="margin-top:10px;">
+                <h4 style="margin-bottom:8px;">Shot Shape</h4>
+                <p><strong>Typical shape:</strong> {shape.shape_label}</p>
+                <p><strong>Start line:</strong> {shape.start_line}</p>
+                <p><strong>Curve:</strong> {shape.curve}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with s2:
+        st.markdown(
+            f"""
+            <div class="fc-card" style="margin-top:10px;">
+                <h4 style="margin-bottom:8px;">Distance Potential</h4>
+                <p><strong>Expected carry:</strong> {_fmt(dp.expected_carry_yd, 1)} yds</p>
+                <p><strong>Actual carry:</strong> {_fmt(dp.actual_carry_yd, 1)} yds</p>
+                <p><strong>Carry gap:</strong> {_fmt(dp.carry_gap_yd, 1)} yds</p>
+                <p>{dp.message}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def _available_families_from_clubs(selected_clubs: List[str]) -> List[str]:
@@ -855,7 +887,7 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
     cur_loft = getattr(cur_delta, "loft_deg", None)
     new_loft = getattr(new_delta, "loft_deg", None)
 
-    st.markdown("#### Projected Change")
+        st.markdown("#### Projected Change")
     if (cur_loft is not None) and (new_loft is not None) and (proposed_setting != current_setting):
         delta_static_loft = new_loft - cur_loft
         est = estimate_launch_spin_change(delta_static_loft, k_loft_to_dynamic, club_id)
@@ -863,7 +895,11 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
             f"Estimated launch change: **{est.launch_change_deg:+.1f}°** "
             f"(range {est.launch_range_deg[0]:+.1f}° to {est.launch_range_deg[1]:+.1f}°)\n\n"
             f"Estimated spin change: **{est.spin_change_rpm:+d} rpm** "
-            f"(range {est.spin_range_rpm[0]:+d} to {est.spin_range_rpm[1]:+d})"
+            f"(range {est.spin_range_rpm[0]:+d} to {est.spin_range_rpm[1]:+d})\n\n"
+            f"Estimated carry effect: **{est.carry_change_yd:+.1f} yds** "
+            f"(range {est.carry_range_yd[0]:+.1f} to {est.carry_range_yd[1]:+.1f})\n\n"
+            f"Estimated peak height effect: **{est.peak_height_change_yd:+.1f} yds** "
+            f"(range {est.peak_height_range_yd[0]:+.1f} to {est.peak_height_range_yd[1]:+.1f})"
         )
         st.caption(est.notes)
     elif proposed_setting != current_setting:
@@ -898,29 +934,33 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
     spin_lo, spin_hi = t["spin"]
 
     with st.expander("Advanced Analysis"):
-        st.markdown("### Limiting Factors")
-        lim: List[str] = []
+    st.markdown("### Limiting Factors")
+    lim: List[str] = []
 
-        miss = miss_tendency(summary.offline_avg)
-        lim.append(f"Miss tendency: **{miss}**" if miss != "Unknown" else "Miss tendency: Unknown")
+    miss = miss_tendency(summary.offline_avg)
+    lim.append(f"Miss tendency: **{miss}**" if miss != "Unknown" else "Miss tendency: Unknown")
 
-        if club_id == "DR":
-            smash_msg = smash_flag_driver(summary.smash_avg, summary.club_speed_avg)
-            if smash_msg:
-                lim.append(smash_msg)
+    shape = shot_shape_summary(canon_df[canon_df["club_id"] == club_id])
+    lim.append(f"Typical shot shape: **{shape.shape_label}**")
 
-        if not np.isnan(summary.vla_avg) and (summary.vla_avg < launch_lo or summary.vla_avg > launch_hi):
-            lim.append(f"Launch window miss: {summary.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
-        if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
-            lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
+    if club_id == "DR":
+        smash_msg = smash_flag_driver(summary.smash_avg, summary.club_speed_avg)
+        if smash_msg:
+            lim.append(smash_msg)
 
-        if hasattr(summary, "peak_height_avg") and not np.isnan(summary.peak_height_avg):
-            lim.append(f"Peak height average: {summary.peak_height_avg:.1f} yd.")
-        if hasattr(summary, "descent_avg") and not np.isnan(summary.descent_avg):
-            lim.append(f"Descent angle average: {summary.descent_avg:.1f}°.")
+    if not np.isnan(summary.vla_avg) and (summary.vla_avg < launch_lo or summary.vla_avg > launch_hi):
+        lim.append(f"Launch window miss: {summary.vla_avg:.1f}° vs target {launch_lo:.1f}–{launch_hi:.1f}°.")
+    if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
+        lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
 
-        for item in lim:
-            st.write("•", item)
+    dp = distance_potential_for_summary(summary)
+    lim.append(
+        f"Distance potential: expected carry **{dp.expected_carry_yd:.1f} yd**, "
+        f"actual **{dp.actual_carry_yd:.1f} yd**."
+    )
+
+    for item in lim:
+        st.write("•", item)
 
         family = _club_family_from_id(club_id)
         if family in {"Driver", "Fairway Wood", "Hybrid"}:
@@ -1160,7 +1200,7 @@ if analysis_mode == "Single Club Analysis":
 
     with top2:
         st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
-        _render_summary_cards(focus_summary)
+        _render_summary_cards(focus_summary, focus_df)
         st.markdown("</div>", unsafe_allow_html=True)
 
         if focus_club == "DR":

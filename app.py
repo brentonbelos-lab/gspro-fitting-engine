@@ -47,9 +47,8 @@ st.markdown(
     <style>
 
 /* -----------------------------
-   Base Layout (BIG UX WIN)
+   Base Layout
 ----------------------------- */
-
 .block-container {
     padding-top: 2.2rem;
     padding-bottom: 2rem;
@@ -58,12 +57,10 @@ st.markdown(
     max-width: none;
 }
 
-/* Reduce Streamlit vertical gaps */
 section.main > div {
     gap: 0.7rem;
 }
 
-/* Tighten markdown spacing globally */
 p {
     margin-bottom: 0.55rem;
     line-height: 1.45;
@@ -72,7 +69,6 @@ p {
 /* -----------------------------
    FitCaddie Colors
 ----------------------------- */
-
 :root {
     --fc-blue: #1f77d0;
     --fc-blue-dark: #103e6e;
@@ -92,7 +88,6 @@ p {
 /* -----------------------------
    Hero
 ----------------------------- */
-
 .fc-hero {
     background: linear-gradient(135deg, #1f77d0 0%, #245f9c 100%);
     color: white;
@@ -103,9 +98,8 @@ p {
 }
 
 /* -----------------------------
-   Cards (Cleaner + Tighter)
+   Cards
 ----------------------------- */
-
 .fc-card {
     background: var(--fc-card-bg);
     border: 1px solid var(--fc-border);
@@ -121,7 +115,6 @@ p {
     color: var(--fc-blue-dark);
 }
 
-/* Remove excess Streamlit spacing inside cards */
 .fc-card .element-container {
     margin-bottom: 0.45rem;
 }
@@ -129,7 +122,6 @@ p {
 /* -----------------------------
    Recommendation Blocks
 ----------------------------- */
-
 .fc-rec-green, .fc-rec-yellow, .fc-rec-red {
     border-radius: 16px;
     padding: 14px 16px;
@@ -152,7 +144,6 @@ p {
     border-color: var(--fc-red-border);
 }
 
-/* Status tag spacing improvement */
 .fc-status {
     display: inline-block;
     padding: 4px 10px;
@@ -180,7 +171,6 @@ p {
 /* -----------------------------
    Verdict Block
 ----------------------------- */
-
 .fc-verdict {
     background: var(--fc-blue-soft);
     border: 2px solid var(--fc-blue);
@@ -190,9 +180,8 @@ p {
 }
 
 /* -----------------------------
-   Metrics (Huge Visual Upgrade)
+   Metrics
 ----------------------------- */
-
 div[data-testid="metric-container"] {
     background: #fafcff;
     border: 1px solid #e6eef8;
@@ -201,20 +190,16 @@ div[data-testid="metric-container"] {
 }
 
 /* -----------------------------
-   Tabs (Cleaner Feel)
+   Tabs
 ----------------------------- */
-
 button[data-baseweb="tab"] {
     padding-top: 0.45rem;
     padding-bottom: 0.45rem;
 }
 
-/* -----------------------------
-   Optional Spacer Helper
------------------------------ */
-
-.fc-gap {
-    height: 0.4rem;
+.fc-subtle {
+    color: #486581;
+    font-size: 0.9rem;
 }
 
     </style>
@@ -234,23 +219,17 @@ def _init_state():
         "show_raw": False,
         "selected_focus_family": "Driver",
         "selected_focus_club": "DR",
-        "single_fw_brand": "Titleist",
-        "single_fw_model": "GT2",
-        "single_fw_loft": 15.0,
-        "single_fw_hosel": "A1",
-        "single_fw_shaft_model": "HZRDUS Black",
-        "single_fw_shaft_weight": 70.0,
-        "single_fw_shaft_flex": "6.0",
 
-        "single_hy_brand": "Titleist",
-        "single_hy_model": "GT2",
-        "single_hy_loft": 18.0,
-        "single_hy_hosel": "A1",
-        "single_hy_shaft_model": "HZRDUS Black",
-        "single_hy_shaft_weight": 80.0,
-        "single_hy_shaft_flex": "6.0",
+        # generic non-driver single build
+        "single_nd_brand": "Titleist",
+        "single_nd_model": "GT2",
+        "single_nd_loft": 15.0,
+        "single_nd_hosel": "A1",
+        "single_nd_shaft_model": "HZRDUS Black",
+        "single_nd_shaft_weight": 80.0,
+        "single_nd_shaft_flex": "6.0",
 
-        # Single mode driver setup
+        # single mode driver setup
         "single_driver_brand": "Titleist",
         "single_driver_model": "TSR3",
         "single_driver_loft": 10.0,
@@ -259,7 +238,7 @@ def _init_state():
         "single_driver_shaft_weight": 60.0,
         "single_driver_shaft_flex": "6.0",
 
-        # Compare mode A
+        # compare mode A
         "cmpA_driver_brand": "Titleist",
         "cmpA_driver_model": "TSR3",
         "cmpA_driver_loft": 10.0,
@@ -268,7 +247,7 @@ def _init_state():
         "cmpA_driver_shaft_weight": 60.0,
         "cmpA_driver_shaft_flex": "6.0",
 
-        # Compare mode B
+        # compare mode B
         "cmpB_driver_brand": "Titleist",
         "cmpB_driver_model": "TSR3",
         "cmpB_driver_loft": 10.0,
@@ -297,6 +276,33 @@ def _fmt(value, decimals=1, suffix=""):
     except Exception:
         pass
     return f"{value:.{decimals}f}{suffix}"
+
+
+def _club_family_from_id(club_id: str) -> str:
+    if club_id == "DR":
+        return "Driver"
+    if club_id.endswith("W"):
+        return "Fairway Wood"
+    if club_id.endswith("H"):
+        return "Hybrid"
+    if club_id.endswith("I"):
+        return "Iron"
+    if club_id in {"PW", "GW", "SW", "LW"}:
+        return "Wedge"
+    return "Other"
+
+
+def _default_loft_for_club(club_id: str) -> float:
+    if club_id == "DR":
+        return 10.0
+    mapping = {
+        "2W": 13.0, "3W": 15.0, "4W": 16.5, "5W": 18.0, "7W": 21.0,
+        "2H": 17.0, "3H": 19.0, "4H": 21.0, "5H": 24.0,
+        "3I": 21.0, "4I": 24.0, "5I": 27.0, "6I": 30.0,
+        "7I": 34.0, "8I": 38.0, "9I": 42.0,
+        "PW": 46.0, "GW": 50.0, "SW": 54.0, "LW": 58.0,
+    }
+    return mapping.get(club_id, 20.0)
 
 
 def _reset_system_and_settings_for_club(club_id: str):
@@ -353,6 +359,7 @@ def _driver_setup_from_prefix(prefix: str) -> DriverUserSetup:
         shaft_flex=st.session_state[f"{prefix}_driver_shaft_flex"],
     )
 
+
 TOP_BRANDS = [
     "Titleist",
     "TaylorMade",
@@ -372,42 +379,88 @@ DRIVER_MODEL_OPTIONS = {
     "TaylorMade": ["Qi35", "Qi35 Max", "Qi35 LS", "Qi35 Max Lite", "Qi10", "Qi10 LS", "Other"],
     "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Elyte Triple Diamond Max", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Other"],
     "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G440 K", "G430 MAX 10K", "G430 LST", "Other"],
-    "Mizuno": ["ST-G 440", "ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "Other"],
+    "Mizuno": ["ST-G 440", "ST-MAX 230", "ST-X 230", "ST-Z 230", "Other"],
     "Srixon": ["ZXi", "ZXi LS", "ZXi MAX", "ZX5 LS Mk II", "ZX5", "ZX7 Mk II", "Other"],
     "Cleveland": ["Other"],
     "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX-K", "DS-ADAPT MAX-D", "DARKSPEED X", "DARKSPEED LS", "Other"],
-    "PXG": ["Black Ops", "Black Ops Tour-1", "Black Ops Ultra-Lite", "0311 GEN6", "0311 XF GEN6", "0311 GEN5", "Other"],
-    "Wilson Staff": ["DYNAPWR LS", "DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR Carbon Lite", "DYNAPWR Max+", "DYNAPWR Max+ Lite", "Other"],
+    "PXG": ["Black Ops", "Black Ops Tour-1", "Black Ops Ultra-Lite", "0311 GEN6", "0311 XF GEN6", "Other"],
+    "Wilson Staff": ["DYNAPWR LS", "DYNAPWR Carbon", "DYNAPWR Max", "Other"],
     "Other": ["Other"],
 }
 
 FAIRWAY_MODEL_OPTIONS = {
     "Titleist": ["GT2", "GT3", "TSR2", "TSR3", "TSi2", "TSi3", "Other"],
-    "TaylorMade": ["Qi35", "Qi35 Max", "Qi10", "Qi10 Tour", "Stealth 2", "Stealth 2 Plus", "Other"],
-    "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Paradym Ai Smoke Max", "Paradym Ai Smoke Triple Diamond", "Paradym Ai Smoke Max Fast", "Other"],
-    "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G430 MAX", "G430 LST", "G430 SFT", "Other"],
-    "Mizuno": ["ST-MAX 230", "ST-X 230", "ST-Z 230", "ST-X 220", "ST-Z 220", "CLK", "Other"],
-    "Srixon": ["ZXi", "ZX Mk II", "ZX", "Z F85", "Z F65", "Z 785", "Other"],
-    "Cleveland": ["Launcher XL Halo", "Launcher HB Turbo", "Launcher HB", "Other"],
-    "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX", "DARKSPEED X", "DARKSPEED LS", "AEROJET", "Other"],
-    "PXG": ["Black Ops", "0311 Black Ops", "0311 XF GEN6", "0311 GEN6", "0211", "0341 X", "Other"],
-    "Wilson Staff": ["DYNAPWR Carbon", "DYNAPWR Max", "DYNAPWR", "Launch Pad 2", "Launch Pad", "Staff Model", "Other"],
+    "TaylorMade": ["Qi35", "Qi35 Max", "Qi10", "Qi10 Tour", "Stealth 2", "Other"],
+    "Callaway": ["Elyte", "Elyte X", "Elyte Triple Diamond", "Paradym Ai Smoke Max", "Other"],
+    "PING": ["G440 MAX", "G440 LST", "G440 SFT", "G430 MAX", "G430 LST", "Other"],
+    "Mizuno": ["ST-MAX 230", "ST-X 230", "ST-Z 230", "Other"],
+    "Srixon": ["ZXi", "ZX Mk II", "ZX", "Other"],
+    "Cleveland": ["Launcher XL Halo", "Other"],
+    "Cobra": ["DS-ADAPT X", "DS-ADAPT LS", "DS-ADAPT MAX", "DARKSPEED X", "Other"],
+    "PXG": ["Black Ops", "0311 Black Ops", "0211", "Other"],
+    "Wilson Staff": ["DYNAPWR Carbon", "DYNAPWR Max", "Other"],
     "Other": ["Other"],
 }
 
 HYBRID_MODEL_OPTIONS = {
     "Titleist": ["GT2", "GT3", "TSR2", "TSR3", "TSi2", "TSi3", "Other"],
-    "TaylorMade": ["Qi35 Rescue", "Qi10 Rescue", "Stealth 2 Rescue", "SIM2 Rescue", "SIM DHY", "P·DHY", "Other"],
-    "Callaway": ["Elyte", "Elyte X", "Paradym Ai Smoke", "Paradym Ai Smoke HL", "Apex UW", "Super Hybrid", "Other"],
-    "PING": ["G440", "G430", "G430 HL", "G425", "iCrossover", "G Le3", "Other"],
-    "Mizuno": ["CLK", "ST-MAX 230", "ST-X 230", "JPX Fli-Hi", "Pro Fli-Hi", "ST-Z 230", "Other"],
-    "Srixon": ["ZXi", "ZX Mk II", "ZX", "ZU85", "ZU65", "Z H85", "Other"],
-    "Cleveland": ["Halo XL", "Launcher XL Halo", "Halo", "Launcher HB Turbo", "Launcher HB", "Other"],
-    "Cobra": ["DS-ADAPT", "DARKSPEED", "AEROJET", "KING TEC", "KING TEC One", "LTDx", "Other"],
-    "PXG": ["Black Ops", "0311 Black Ops", "0311 XF GEN6", "0311 GEN6", "0211", "0317 X", "Other"],
-    "Wilson Staff": ["DYNAPWR", "Launch Pad 2", "Launch Pad", "Staff Model Utility", "D9", "C300", "Other"],
+    "TaylorMade": ["Qi35 Rescue", "Qi10 Rescue", "Stealth 2 Rescue", "Other"],
+    "Callaway": ["Elyte", "Elyte X", "Paradym Ai Smoke", "Apex UW", "Other"],
+    "PING": ["G440", "G430", "G425", "iCrossover", "Other"],
+    "Mizuno": ["CLK", "ST-MAX 230", "JPX Fli-Hi", "Other"],
+    "Srixon": ["ZXi", "ZX Mk II", "ZX", "Other"],
+    "Cleveland": ["Halo XL", "Launcher XL Halo", "Other"],
+    "Cobra": ["DS-ADAPT", "DARKSPEED", "AEROJET", "KING TEC", "Other"],
+    "PXG": ["Black Ops", "0311 Black Ops", "0211", "Other"],
+    "Wilson Staff": ["DYNAPWR", "Launch Pad 2", "Other"],
     "Other": ["Other"],
 }
+
+IRON_MODEL_OPTIONS = {
+    "Titleist": ["T100", "T150", "T200", "T350", "U505", "Other"],
+    "TaylorMade": ["P7CB", "P7MC", "P770", "P790", "Qi", "Other"],
+    "Callaway": ["Apex Pro", "Apex CB", "Apex Ai200", "Apex Ai300", "Paradym Ai Smoke", "Other"],
+    "PING": ["Blueprint T", "Blueprint S", "i530", "i230", "G430", "Other"],
+    "Mizuno": ["JPX 923 Tour", "JPX 923 Forged", "JPX 925 Hot Metal", "Pro 243", "Pro 245", "Other"],
+    "Srixon": ["ZX7", "ZX5", "ZX4", "Z-Forged", "Other"],
+    "Cleveland": ["Launcher XL Halo Irons", "Other"],
+    "Cobra": ["King Tour", "Forged Tec", "Darkspeed", "Aerojet", "Other"],
+    "PXG": ["0317 T", "0317 CB", "0311 P", "0311 XP", "Other"],
+    "Wilson Staff": ["Staff Model CB", "Staff Model Blade", "Dynapwr Forged", "Dynapwr", "Other"],
+    "Other": ["Other"],
+}
+
+WEDGE_MODEL_OPTIONS = {
+    "Titleist": ["Vokey SM10", "Vokey SM9", "Vokey SM8", "Other"],
+    "TaylorMade": ["MG4", "Hi-Toe 3", "Other"],
+    "Callaway": ["Opus", "Jaws Raw", "Other"],
+    "PING": ["s159", "Glide 4.0", "Other"],
+    "Mizuno": ["T24", "S23", "Other"],
+    "Srixon": ["Cleveland RTX 6 ZipCore", "Cleveland CBX 4 ZipCore", "Other"],
+    "Cleveland": ["RTX 6 ZipCore", "CBX 4 ZipCore", "Smart Sole", "Other"],
+    "Cobra": ["Snakebite", "King Wedge", "Other"],
+    "PXG": ["Sugar Daddy III", "Other"],
+    "Wilson Staff": ["Staff Model", "Harmonized", "Other"],
+    "Other": ["Other"],
+}
+
+
+def _model_options_for_family(brand: str, family: str) -> List[str]:
+    if family == "Fairway Wood":
+        return FAIRWAY_MODEL_OPTIONS.get(brand, ["Other"])
+    if family == "Hybrid":
+        return HYBRID_MODEL_OPTIONS.get(brand, ["Other"])
+    if family == "Iron":
+        return IRON_MODEL_OPTIONS.get(brand, ["Other"])
+    if family == "Wedge":
+        return WEDGE_MODEL_OPTIONS.get(brand, ["Other"])
+    return ["Other"]
+
+
+def _driver_build_title() -> str:
+    return "Driver Build"
+
+
 def _render_driver_setup(prefix: str, title: str):
     st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
 
@@ -426,13 +479,10 @@ def _render_driver_setup(prefix: str, title: str):
 
     with c2:
         brand = st.session_state[f"{prefix}_driver_brand"]
-
         model_options = DRIVER_MODEL_OPTIONS.get(brand, ["Other"])
-
         current_model = st.session_state[f"{prefix}_driver_model"]
         if current_model not in model_options:
             current_model = model_options[0]
-
         st.session_state[f"{prefix}_driver_model"] = st.selectbox(
             "Head Model",
             model_options,
@@ -495,8 +545,19 @@ def _club_build_from_prefix(prefix: str) -> Dict[str, object]:
     }
 
 
-def _render_non_driver_build(prefix: str, title: str, club_kind: str):
+def _render_non_driver_build(prefix: str, title: str, club_id: str):
+    family = _club_family_from_id(club_id)
+    adjustable = family in {"Fairway Wood", "Hybrid"}
+
+    if family == "Other":
+        return
+
     st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
+
+    # set club-specific defaults when switching families/clubs
+    current_loft = float(st.session_state.get(f"{prefix}_loft", _default_loft_for_club(club_id)))
+    if abs(current_loft - 15.0) < 0.01 and family in {"Iron", "Wedge"}:
+        st.session_state[f"{prefix}_loft"] = float(_default_loft_for_club(club_id))
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -506,7 +567,7 @@ def _render_non_driver_build(prefix: str, title: str, club_kind: str):
         if current_brand not in brand_options:
             current_brand = "Other"
         st.session_state[f"{prefix}_brand"] = st.selectbox(
-            f"{club_kind} Brand",
+            f"{family} Brand",
             brand_options,
             index=brand_options.index(current_brand),
             key=f"{prefix}_brand_select",
@@ -514,39 +575,43 @@ def _render_non_driver_build(prefix: str, title: str, club_kind: str):
 
     with c2:
         brand = st.session_state[f"{prefix}_brand"]
-
-        if club_kind == "Fairway Wood":
-            model_options = FAIRWAY_MODEL_OPTIONS.get(brand, ["Other"])
-        else:
-            model_options = HYBRID_MODEL_OPTIONS.get(brand, ["Other"])
-
+        model_options = _model_options_for_family(brand, family)
         current_model = st.session_state[f"{prefix}_model"]
         if current_model not in model_options:
             current_model = model_options[0]
-
         st.session_state[f"{prefix}_model"] = st.selectbox(
-            f"{club_kind} Model",
+            f"{family} Model",
             model_options,
             index=model_options.index(current_model),
             key=f"{prefix}_model_select",
         )
 
     with c3:
+        min_loft = 10.0 if family in {"Fairway Wood", "Hybrid"} else 15.0
+        max_loft = 30.0 if family in {"Fairway Wood", "Hybrid"} else 65.0
+        default_loft = _default_loft_for_club(club_id)
+        val = float(st.session_state.get(f"{prefix}_loft", default_loft))
+        if val < min_loft or val > max_loft:
+            val = default_loft
         st.session_state[f"{prefix}_loft"] = st.number_input(
             "Loft (°)",
-            min_value=10.0,
-            max_value=30.0,
-            value=float(st.session_state[f"{prefix}_loft"]),
+            min_value=float(min_loft),
+            max_value=float(max_loft),
+            value=float(val),
             step=0.5,
             key=f"{prefix}_loft_input",
         )
 
     with c4:
-        st.session_state[f"{prefix}_hosel"] = st.text_input(
-            "Hosel Setting",
-            value=st.session_state[f"{prefix}_hosel"],
-            key=f"{prefix}_hosel_input",
-        )
+        if adjustable:
+            st.session_state[f"{prefix}_hosel"] = st.text_input(
+                "Hosel Setting",
+                value=st.session_state[f"{prefix}_hosel"],
+                key=f"{prefix}_hosel_input",
+            )
+        else:
+            st.session_state[f"{prefix}_hosel"] = ""
+            st.markdown('<div class="fc-subtle" style="padding-top:0.5rem;">No adjustable hosel input needed for this club.</div>', unsafe_allow_html=True)
 
     s1, s2, s3 = st.columns(3)
 
@@ -558,10 +623,11 @@ def _render_non_driver_build(prefix: str, title: str, club_kind: str):
         )
 
     with s2:
+        max_weight = 140.0 if family in {"Iron", "Wedge"} else 120.0
         st.session_state[f"{prefix}_shaft_weight"] = st.number_input(
             "Shaft Weight (g)",
             min_value=40.0,
-            max_value=120.0,
+            max_value=float(max_weight),
             value=float(st.session_state[f"{prefix}_shaft_weight"]),
             step=1.0,
             key=f"{prefix}_shaft_weight_input",
@@ -619,8 +685,14 @@ def _render_summary_cards(summary):
     c7.metric("Spin", _fmt(summary.spin_avg, 0))
     c8.metric("AoA", _fmt(summary.aoa_avg, 1))
 
+    c9, c10, c11, c12 = st.columns(4)
+    c9.metric("Peak Height", _fmt(getattr(summary, "peak_height_avg", np.nan), 1))
+    c10.metric("Descent", _fmt(getattr(summary, "descent_avg", np.nan), 1))
+    c11.metric("Club Speed SD", _fmt(summary.club_speed_std, 1))
+    c12.metric("Offline SD", _fmt(summary.offline_std, 1))
 
-def _render_focus_picker(selected_clubs: List[str]):
+
+def _available_families_from_clubs(selected_clubs: List[str]) -> List[str]:
     families_present = []
     if any(c == "DR" for c in selected_clubs):
         families_present.append("Driver")
@@ -628,9 +700,18 @@ def _render_focus_picker(selected_clubs: List[str]):
         families_present.append("Fairway Wood")
     if any(c.endswith("H") for c in selected_clubs):
         families_present.append("Hybrid")
+    if any(c.endswith("I") for c in selected_clubs):
+        families_present.append("Iron")
+    if any(c in {"PW", "GW", "SW", "LW"} for c in selected_clubs):
+        families_present.append("Wedge")
+    return families_present
+
+
+def _render_focus_picker(selected_clubs: List[str]):
+    families_present = _available_families_from_clubs(selected_clubs)
 
     if not families_present:
-        st.warning("No supported driver, fairway wood, or hybrid data found.")
+        st.warning("No supported club data found.")
         st.stop()
 
     if st.session_state["selected_focus_family"] not in families_present:
@@ -639,7 +720,6 @@ def _render_focus_picker(selected_clubs: List[str]):
     st.markdown('<div class="fc-card">', unsafe_allow_html=True)
     st.subheader("Choose Fitting Focus")
 
-    # Only show family picker if there's more than one family available
     if len(families_present) > 1:
         st.session_state["selected_focus_family"] = st.radio(
             "What are we fitting today?",
@@ -651,17 +731,30 @@ def _render_focus_picker(selected_clubs: List[str]):
         st.session_state["selected_focus_family"] = families_present[0]
         st.caption(f"Detected focus: {families_present[0]}")
 
-    if st.session_state["selected_focus_family"] == "Driver":
+    family = st.session_state["selected_focus_family"]
+    if family == "Driver":
         available = [c for c in selected_clubs if c == "DR"]
-    elif st.session_state["selected_focus_family"] == "Fairway Wood":
+    elif family == "Fairway Wood":
         available = [c for c in selected_clubs if c.endswith("W")]
-    else:
+    elif family == "Hybrid":
         available = [c for c in selected_clubs if c.endswith("H")]
+    elif family == "Iron":
+        available = [c for c in selected_clubs if c.endswith("I")]
+    else:
+        available = [c for c in selected_clubs if c in {"PW", "GW", "SW", "LW"}]
+
+    available = sorted(available, key=lambda x: (
+        0 if x == "DR" else
+        1 if x.endswith("W") else
+        2 if x.endswith("H") else
+        3 if x.endswith("I") else
+        4,
+        x
+    ))
 
     if st.session_state["selected_focus_club"] not in available:
         st.session_state["selected_focus_club"] = available[0]
 
-    # Only show club picker if there's more than one club in the chosen family
     if len(available) > 1:
         st.session_state["selected_focus_club"] = st.selectbox(
             "Choose club",
@@ -678,6 +771,19 @@ def _render_focus_picker(selected_clubs: List[str]):
 
 def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> Dict[str, Dict]:
     hosel_configs: Dict[str, Dict] = {}
+    family = _club_family_from_id(club_id)
+
+    if family not in {"Driver", "Fairway Wood", "Hybrid"}:
+        st.markdown(
+            f"""
+            <div class="fc-card">
+                <h3>{title}</h3>
+                <p class="fc-subtle">Hosel setting recommendations apply only to adjustable driver, fairway, and hybrid heads.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return hosel_configs
 
     st.markdown(f'<div class="fc-card"><h3>{title}</h3>', unsafe_allow_html=True)
 
@@ -717,15 +823,7 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
         )
 
     with c4:
-        if club_id == "DR":
-            default_loft = 10.0
-        elif club_id.endswith("W"):
-            default_loft = 15.0
-        elif club_id.endswith("H"):
-            default_loft = 18.0
-        else:
-            default_loft = 10.0
-
+        default_loft = _default_loft_for_club(club_id)
         stated_loft = st.number_input(
             f"{club_id} Stated Loft (°)",
             min_value=0.0,
@@ -807,7 +905,7 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
         lim.append(f"Miss tendency: **{miss}**" if miss != "Unknown" else "Miss tendency: Unknown")
 
         if club_id == "DR":
-            smash_msg = smash_flag_driver(summary.smash_avg)
+            smash_msg = smash_flag_driver(summary.smash_avg, summary.club_speed_avg)
             if smash_msg:
                 lim.append(smash_msg)
 
@@ -816,76 +914,84 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
         if not np.isnan(summary.spin_avg) and (summary.spin_avg < spin_lo or summary.spin_avg > spin_hi):
             lim.append(f"Spin window miss: {summary.spin_avg:.0f} rpm vs target {spin_lo:.0f}–{spin_hi:.0f} rpm.")
 
+        if hasattr(summary, "peak_height_avg") and not np.isnan(summary.peak_height_avg):
+            lim.append(f"Peak height average: {summary.peak_height_avg:.1f} yd.")
+        if hasattr(summary, "descent_avg") and not np.isnan(summary.descent_avg):
+            lim.append(f"Descent angle average: {summary.descent_avg:.1f}°.")
+
         for item in lim:
             st.write("•", item)
 
-        st.markdown("### Settings Recommendation")
-        recos: List[str] = []
+        family = _club_family_from_id(club_id)
+        if family in {"Driver", "Fairway Wood", "Hybrid"}:
+            st.markdown("### Settings Recommendation")
+            recos: List[str] = []
 
-        if club_id in hosel_configs:
-            h = hosel_configs[club_id]
-            brand = h["brand"]
-            system_name = h["system_name"]
-            handedness = h["handedness"]
-            current_setting = h["current_setting"]
+            if club_id in hosel_configs:
+                h = hosel_configs[club_id]
+                brand = h["brand"]
+                system_name = h["system_name"]
+                handedness = h["handedness"]
+                current_setting = h["current_setting"]
 
-            needed_loft = 0.0
-            needed_lie = 0.0
+                needed_loft = 0.0
+                needed_lie = 0.0
 
-            if not np.isnan(summary.vla_avg):
-                launch_per_static_loft = 0.85 * k_loft_to_dynamic
-                if summary.vla_avg < launch_lo:
-                    needed_loft = min(2.0, (launch_lo - summary.vla_avg) / max(0.05, launch_per_static_loft))
-                elif summary.vla_avg > launch_hi:
-                    needed_loft = max(-2.0, -(summary.vla_avg - launch_hi) / max(0.05, launch_per_static_loft))
+                if not np.isnan(summary.vla_avg):
+                    launch_per_static_loft = 0.85 * k_loft_to_dynamic
+                    if summary.vla_avg < launch_lo:
+                        needed_loft = min(2.0, (launch_lo - summary.vla_avg) / max(0.05, launch_per_static_loft))
+                    elif summary.vla_avg > launch_hi:
+                        needed_loft = max(-2.0, -(summary.vla_avg - launch_hi) / max(0.05, launch_per_static_loft))
 
-            miss = miss_tendency(summary.offline_avg)
-            if miss == "Right miss tendency":
-                needed_lie = +0.75
-            elif miss == "Left miss tendency":
-                needed_lie = -0.75
+                miss = miss_tendency(summary.offline_avg)
+                if miss == "Right miss tendency":
+                    needed_lie = +0.75
+                elif miss == "Left miss tendency":
+                    needed_lie = -0.75
 
-            if not np.isnan(summary.spin_avg):
-                if summary.spin_avg < spin_lo:
-                    needed_loft = max(needed_loft, +0.75)
-                elif summary.spin_avg > spin_hi:
-                    needed_loft = min(needed_loft, -0.75)
+                if not np.isnan(summary.spin_avg):
+                    if summary.spin_avg < spin_lo:
+                        needed_loft = max(needed_loft, +0.75)
+                    elif summary.spin_avg > spin_hi:
+                        needed_loft = min(needed_loft, -0.75)
 
-            settings = list_settings(brand, system_name, handedness)
-            reco = pick_one_hosel_setting(
-                settings=settings,
-                translate_fn=translate_setting,
-                brand=brand,
-                system_name=system_name,
-                handedness=handedness,
-                current_setting=current_setting,
-                needed_loft_delta=needed_loft,
-                needed_lie_delta=needed_lie,
-            )
+                settings = list_settings(brand, system_name, handedness)
+                reco = pick_one_hosel_setting(
+                    settings=settings,
+                    translate_fn=translate_setting,
+                    brand=brand,
+                    system_name=system_name,
+                    handedness=handedness,
+                    current_setting=current_setting,
+                    needed_loft_delta=needed_loft,
+                    needed_lie_delta=needed_lie,
+                )
 
-            if abs(needed_loft) < 0.25 and abs(needed_lie) < 0.25:
-                recos.append("Current setting looks reasonable for launch, spin, and start-line tendencies.")
-            else:
-                recos.append(f"Hosel goal: loft Δ **{needed_loft:+.2f}°**, lie Δ **{needed_lie:+.2f}°**.")
-                if reco["type"] == "exact":
-                    r = reco["recommended"]
-                    recos.append(
-                        f"Suggested change: **{reco['current']} → {r['setting']}** "
-                        f"(loft {r['loft_delta']:+.2f}°, lie {r['lie_delta']:+.2f}°)."
-                    )
+                if abs(needed_loft) < 0.25 and abs(needed_lie) < 0.25:
+                    recos.append("Current setting looks reasonable for launch, spin, and start-line tendencies.")
                 else:
-                    recos.append(reco["message"])
-        else:
-            recos.append("Configure this club in Club Settings to enable a setting recommendation.")
+                    recos.append(f"Hosel goal: loft Δ **{needed_loft:+.2f}°**, lie Δ **{needed_lie:+.2f}°**.")
+                    if reco["type"] == "exact":
+                        r = reco["recommended"]
+                        recos.append(
+                            f"Suggested change: **{reco['current']} → {r['setting']}** "
+                            f"(loft {r['loft_delta']:+.2f}°, lie {r['lie_delta']:+.2f}°)."
+                        )
+                    else:
+                        recos.append(reco["message"])
+            else:
+                recos.append("Configure this club in Club Settings to enable a setting recommendation.")
 
-        for r in recos:
-            st.write("•", r)
+            for r in recos:
+                st.write("•", r)
 
         st.markdown("### Shot Table")
         show_cols = [
             "club_raw", "club_id",
             "club_speed_mph", "ball_speed_mph", "smash",
             "carry_yd", "total_yd", "offline_yd",
+            "peak_height_yd", "descent_deg",
             "vla_deg", "backspin_rpm", "aoa_deg",
             "club_path_deg", "face_to_path_deg", "face_to_target_deg",
         ]
@@ -894,25 +1000,6 @@ def _render_advanced_analysis(club_id: str, canon_df: pd.DataFrame, hosel_config
             canon_df[canon_df["club_id"] == club_id][cols_present].reset_index(drop=True),
             use_container_width=True,
         )
-
-
-def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: DriverUserSetup):
-    summaries = summarize_by_club(driver_df)
-    if "DR" not in summaries:
-        st.info("No valid driver summary available.")
-        return
-
-    offline_valid = driver_df["offline_yd"].dropna()
-    fairway_pct = float((offline_valid.abs() <= 15).mean() * 100.0) if len(offline_valid) else np.nan
-
-    bundle = build_driver_recommendations(
-        summary=summaries["DR"],
-        user_setup=driver_setup,
-        fairway_hit_pct=fairway_pct if not np.isnan(fairway_pct) else None,
-    )
-
-    st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
-    _render_recommendation_cards(bundle)
 
 
 def _render_driver_recommendations(driver_df: pd.DataFrame, driver_setup: DriverUserSetup):
@@ -952,9 +1039,6 @@ def _render_non_driver_recommendations(
         hosel_setting=build_cfg.get("hosel_setting", cfg.get("current_setting")),
     )
     return bundle
-
-    st.markdown('<div class="fc-card"><h3>Fitter Recommendations</h3></div>', unsafe_allow_html=True)
-    _render_recommendation_cards(bundle)
 
 
 # -----------------------------
@@ -1056,6 +1140,7 @@ if analysis_mode == "Single Club Analysis":
         st.stop()
 
     focus_summary = summaries[focus_club]
+    focus_family = _club_family_from_id(focus_club)
 
     hosel_title = f"Hosel Settings — {focus_club}"
     hosel_configs = _render_hosel_block(
@@ -1079,26 +1164,18 @@ if analysis_mode == "Single Club Analysis":
         st.markdown("</div>", unsafe_allow_html=True)
 
         if focus_club == "DR":
-            _render_driver_setup("single", "Driver Build")
+            _render_driver_setup("single", _driver_build_title())
             recommendation_bundle = _render_driver_recommendations(
                 focus_df,
                 _driver_setup_from_prefix("single"),
             )
-
-        elif focus_club.endswith("W"):
-            _render_non_driver_build("single_fw", "Fairway Wood Build", "Fairway Wood")
+        else:
+            build_title = f"{focus_family} Build"
+            _render_non_driver_build("single_nd", build_title, focus_club)
             recommendation_bundle = _render_non_driver_recommendations(
                 focus_summary,
                 hosel_configs,
-                _club_build_from_prefix("single_fw"),
-            )
-
-        elif focus_club.endswith("H"):
-            _render_non_driver_build("single_hy", "Hybrid Build", "Hybrid")
-            recommendation_bundle = _render_non_driver_recommendations(
-                focus_summary,
-                hosel_configs,
-                _club_build_from_prefix("single_hy"),
+                _club_build_from_prefix("single_nd"),
             )
 
         if recommendation_bundle is not None:
@@ -1122,7 +1199,10 @@ else:
         uploaded_a = st.file_uploader("Upload Setup A CSV", type=["csv"], key="compare_upload_a")
         uploaded_b = st.file_uploader("Upload Setup B CSV", type=["csv"], key="compare_upload_b")
 
-    st.markdown('<div class="fc-card"><h3>Compare Two Driver Setups</h3><p>Best for A1 vs A2, shaft vs shaft, or head vs head testing.</p></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="fc-card"><h3>Compare Two Driver Setups</h3><p>Best for A1 vs A2, shaft vs shaft, or head vs head testing.</p></div>',
+        unsafe_allow_html=True,
+    )
 
     c1, c2 = st.columns(2)
     with c1:
@@ -1187,7 +1267,7 @@ else:
         except Exception:
             pass
         return f"{val:+.{decimals}f}{suffix}"
-    
+
     metric_df = pd.DataFrame(
         {
             "Metric": [
@@ -1236,7 +1316,7 @@ else:
             ],
         }
     )
-    
+
     st.dataframe(metric_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 

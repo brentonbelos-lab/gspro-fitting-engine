@@ -448,6 +448,39 @@ def _is_wedge_id(club_id: str) -> bool:
     return c in {"PW", "GW", "AW", "UW", "SW", "LW"}
 
 
+def _normalize_club_id(club_id: str) -> str:
+    if club_id is None:
+        return ""
+
+    c = str(club_id).strip().upper()
+
+    # I4 -> 4I, H3 -> 3H, W3 -> 3W
+    if len(c) >= 2 and c[0] in {"I", "H", "W"} and c[1:].isdigit():
+        c = f"{c[1:]}{c[0]}"
+
+    return c
+
+
+def _is_iron_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return len(c) >= 2 and c[:-1].isdigit() and c.endswith("I")
+
+
+def _is_wood_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return len(c) >= 2 and c[:-1].isdigit() and c.endswith("W")
+
+
+def _is_hybrid_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return len(c) >= 2 and c[:-1].isdigit() and c.endswith("H")
+
+
+def _is_wedge_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return c in {"PW", "GW", "AW", "UW", "SW", "LW"}
+
+
 def _club_family_from_id(club_id: str) -> str:
     c = _normalize_club_id(club_id)
 
@@ -462,7 +495,6 @@ def _club_family_from_id(club_id: str) -> str:
     if _is_wedge_id(c):
         return "Wedge"
     return "Other"
-
 
 def _club_sort_key(club_id: str):
     order = {

@@ -47,7 +47,7 @@ st.markdown(
     """
     <style>
     .block-container {
-        padding-top: 1.4rem;
+        padding-top: 0.75rem;
         padding-bottom: 2rem;
         padding-left: 1.2rem;
         padding-right: 1.2rem;
@@ -55,7 +55,7 @@ st.markdown(
     }
 
     section.main > div {
-        gap: 0.7rem;
+        gap: 0.55rem;
     }
 
     :root {
@@ -82,7 +82,7 @@ st.markdown(
     }
 
     .fc-shell {
-        margin-bottom: 0.8rem;
+        margin-bottom: 0.6rem;
     }
 
     .fc-hero {
@@ -90,7 +90,7 @@ st.markdown(
         color: white;
         border-radius: 20px;
         padding: 20px 22px;
-        margin-bottom: 14px;
+        margin-bottom: 10px;
         box-shadow: 0 10px 28px rgba(18, 49, 77, 0.16);
     }
 
@@ -122,24 +122,6 @@ st.markdown(
     .fc-subtle {
         color: var(--fc-text-soft);
         font-size: 0.92rem;
-    }
-
-    .fc-chip-row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 6px;
-    }
-
-    .fc-chip {
-        display: inline-block;
-        padding: 5px 10px;
-        border-radius: 999px;
-        background: #f3f8fd;
-        border: 1px solid #dbe8f5;
-        color: #355270;
-        font-size: 0.82rem;
-        font-weight: 600;
     }
 
     .fc-rec {
@@ -318,6 +300,10 @@ _init_state()
 # =========================================================
 # CONSTANTS
 # =========================================================
+WEDGE_CODES = {"PW", "AW", "GW", "SW", "LW"}
+FAIRWAY_CODES = {"2W", "3W", "4W", "5W", "7W", "9W", "11W"}
+HYBRID_CODES = {"2H", "3H", "4H", "5H", "6H", "7H"}
+
 TOP_BRANDS = [
     "Titleist",
     "TaylorMade",
@@ -433,11 +419,11 @@ def _club_family_from_id(club_id: str) -> str:
 
     if c == "DR":
         return "Driver"
-    if c in {"PW", "GW", "AW", "SW", "LW"}:
+    if c in WEDGE_CODES:
         return "Wedge"
-    if c.endswith("W"):
+    if c in FAIRWAY_CODES:
         return "Fairway Wood"
-    if c.endswith("H"):
+    if c in HYBRID_CODES:
         return "Hybrid"
     if c.endswith("I"):
         return "Iron"
@@ -447,8 +433,8 @@ def _club_family_from_id(club_id: str) -> str:
 def _club_sort_key(club_id: str):
     order = {
         "DR": 0,
-        "2W": 1, "3W": 2, "4W": 3, "5W": 4, "7W": 5, "9W": 6,
-        "2H": 10, "3H": 11, "4H": 12, "5H": 13, "6H": 14,
+        "2W": 1, "3W": 2, "4W": 3, "5W": 4, "7W": 5, "9W": 6, "11W": 7,
+        "2H": 10, "3H": 11, "4H": 12, "5H": 13, "6H": 14, "7H": 15,
         "3I": 20, "4I": 21, "5I": 22, "6I": 23, "7I": 24, "8I": 25, "9I": 26,
         "PW": 30, "AW": 31, "GW": 32, "SW": 33, "LW": 34,
         "PT": 99,
@@ -481,35 +467,40 @@ def _model_options_for_family(brand: str, family: str) -> List[str]:
 
 
 def _available_families_from_clubs(selected_clubs: List[str]) -> List[str]:
-    families = []
-    if any(c == "DR" for c in selected_clubs):
-        families.append("Driver")
-    if any(c.endswith("W") for c in selected_clubs):
-        families.append("Fairway Wood")
-    if any(c.endswith("H") for c in selected_clubs):
-        families.append("Hybrid")
-    if any(c.endswith("I") for c in selected_clubs):
-        families.append("Iron")
-    if any(c in {"PW", "AW", "GW", "SW", "LW"} for c in selected_clubs):
-        families.append("Wedge")
-    return families
+    clubs = {str(c).upper().strip() for c in selected_clubs}
+
+    families_present = []
+    if "DR" in clubs:
+        families_present.append("Driver")
+    if any(c in FAIRWAY_CODES for c in clubs):
+        families_present.append("Fairway Wood")
+    if any(c in HYBRID_CODES for c in clubs):
+        families_present.append("Hybrid")
+    if any(c.endswith("I") for c in clubs):
+        families_present.append("Iron")
+    if any(c in WEDGE_CODES for c in clubs):
+        families_present.append("Wedge")
+
+    return families_present
 
 
 def _clubs_for_family(selected_clubs: List[str], family: str) -> List[str]:
-    if family == "Driver":
-        clubs = [c for c in selected_clubs if c == "DR"]
-    elif family == "Fairway Wood":
-        clubs = [c for c in selected_clubs if c.endswith("W")]
-    elif family == "Hybrid":
-        clubs = [c for c in selected_clubs if c.endswith("H")]
-    elif family == "Iron":
-        clubs = [c for c in selected_clubs if c.endswith("I")]
-    elif family == "Wedge":
-        clubs = [c for c in selected_clubs if c in {"PW", "AW", "GW", "SW", "LW"}]
-    else:
-        clubs = []
+    clubs = [str(c).upper().strip() for c in selected_clubs]
 
-    return sorted(clubs, key=_club_sort_key)
+    if family == "Driver":
+        available = [c for c in clubs if c == "DR"]
+    elif family == "Fairway Wood":
+        available = [c for c in clubs if c in FAIRWAY_CODES]
+    elif family == "Hybrid":
+        available = [c for c in clubs if c in HYBRID_CODES]
+    elif family == "Iron":
+        available = [c for c in clubs if c.endswith("I")]
+    elif family == "Wedge":
+        available = [c for c in clubs if c in WEDGE_CODES]
+    else:
+        available = []
+
+    return sorted(set(available), key=_club_sort_key)
 
 
 def _driver_setup_from_prefix(prefix: str) -> DriverUserSetup:
@@ -604,13 +595,6 @@ def _render_focus_picker(selected_clubs: List[str], club_counts: Dict[str, int])
         index=option_labels.index(current_label),
     )
     st.session_state["selected_focus_club"] = label_to_club[chosen_label]
-
-    st.markdown(
-        '<div class="fc-chip-row">'
-        + "".join([f'<span class="fc-chip">{c}: {club_counts.get(c, 0)} shots</span>' for c in family_clubs])
-        + "</div>",
-        unsafe_allow_html=True,
-    )
 
     st.markdown("</div>", unsafe_allow_html=True)
     return st.session_state["selected_focus_club"]
@@ -796,7 +780,7 @@ def _render_non_driver_build(prefix: str, title: str, club_id: str):
 
 
 # =========================================================
-# HOSel HELPERS
+# HOSEL HELPERS
 # =========================================================
 def _reset_system_and_settings_for_club(club_id: str):
     brand_key = f"{club_id}_brand"
@@ -1382,7 +1366,7 @@ if analysis_mode == "Single Club Analysis":
             _render_non_driver_build("single_nd", f"{focus_family} Build", focus_club)
 
     with tab_hosel:
-        hosel_configs = _render_hosel_block(
+        _render_hosel_block(
             club_id=focus_club,
             title=f"Hosel Settings — {focus_club}",
             k_loft_to_dynamic=k_loft_to_dynamic,
@@ -1398,13 +1382,11 @@ if analysis_mode == "Single Club Analysis":
             )
         else:
             build_cfg = _club_build_from_prefix("single_nd")
-            hosel_configs = {
-                **_render_hosel_block(
-                    club_id=focus_club,
-                    title=f"Hosel Settings — {focus_club}",
-                    k_loft_to_dynamic=k_loft_to_dynamic,
-                )
-            }
+            hosel_configs = _render_hosel_block(
+                club_id=focus_club,
+                title=f"Hosel Settings — {focus_club}",
+                k_loft_to_dynamic=k_loft_to_dynamic,
+            )
             recommendation_bundle = _render_non_driver_recommendations(
                 focus_summary,
                 hosel_configs,

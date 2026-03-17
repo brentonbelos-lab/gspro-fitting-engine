@@ -281,6 +281,32 @@ def _is_wedge_id(club_id: str) -> bool:
     return c in {"PW", "GW", "AW", "UW", "SW", "LW"}
 
 
+def _club_sort_key(club_id: str):
+    c = _normalize_club_id(club_id)
+
+    if c == "DR":
+        return (0, 0)
+    if _is_wood_id(c):
+        return (1, int(c[:-1]))
+    if _is_hybrid_id(c):
+        return (2, int(c[:-1]))
+    if _is_iron_id(c):
+        return (3, int(c[:-1]))
+
+    wedge_order = {
+        "PW": 0,
+        "AW": 1,
+        "GW": 2,
+        "UW": 3,
+        "SW": 4,
+        "LW": 5,
+    }
+    if _is_wedge_id(c):
+        return (4, wedge_order.get(c, 99))
+
+    return (9, 999)
+
+
 def _club_family_from_id(club_id: str) -> str:
     c = _normalize_club_id(club_id)
 

@@ -647,7 +647,7 @@ def _club_sort_key(club_id: str):
     return (9, 999)
 
 
-def _render_focus_picker(selected_clubs: List[str]):
+def _render_focus_picker(selected_clubs: List[str], club_counts: Dict[str, int]) -> str:
     normalized_map = {_normalize_club_id(c): c for c in selected_clubs}
     normalized_clubs = list(normalized_map.keys())
 
@@ -689,22 +689,31 @@ def _render_focus_picker(selected_clubs: List[str]):
 
     available = sorted(available, key=_club_sort_key)
 
+    if not available:
+        st.warning("No clubs found in that family.")
+        st.stop()
+
     if st.session_state["selected_focus_club"] not in available:
         st.session_state["selected_focus_club"] = available[0]
 
-    if len(available) > 1:
-        st.session_state["selected_focus_club"] = st.selectbox(
-            "Choose club",
-            available,
-            index=available.index(st.session_state["selected_focus_club"]),
-        )
-    else:
-        st.session_state["selected_focus_club"] = available[0]
-        st.caption(f"Detected club: {available[0]}")
+    option_labels = [f"{c} ({club_counts.get(normalized_map[c], club_counts.get(c, 0))} shots)" for c in available]
+    label_to_club = dict(zip(option_labels, available))
+
+    current_label = next(
+        (lbl for lbl, cid in label_to_club.items() if cid == st.session_state["selected_focus_club"]),
+        option_labels[0],
+    )
+
+    chosen_label = st.selectbox(
+        "Choose club",
+        option_labels,
+        index=option_labels.index(current_label),
+    )
+
+    st.session_state["selected_focus_club"] = label_to_club[chosen_label]
 
     st.markdown("</div>", unsafe_allow_html=True)
     return st.session_state["selected_focus_club"]
-
 
 # =========================================================
 # SETUP / BUILD FORMS

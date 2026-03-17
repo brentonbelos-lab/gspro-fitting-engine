@@ -85,27 +85,40 @@ def normalize_club_label(label: str) -> str:
         return "OTHER"
 
     s = label.strip().upper()
+    s = re.sub(r"\s+", " ", s)
 
-    if s in {"DR", "PW", "GW", "SW", "LW", "PT"}:
+    if s in {"DR", "DRIVER"}:
+        return "DR"
+    if s in {"PW", "GW", "SW", "LW", "PT"}:
         return s
 
-    if s.startswith("W") and len(s) == 2 and s[1].isdigit():
+    # Support both GSPro styles: 3W and W3, 3H and H3, 4I and I4.
+    if re.fullmatch(r"W\d", s):
         return f"{s[1]}W"
-    if s.startswith("H") and len(s) == 2 and s[1].isdigit():
+    if re.fullmatch(r"H\d", s):
         return f"{s[1]}H"
-    if s.startswith("I") and len(s) == 2 and s[1].isdigit():
+    if re.fullmatch(r"I\d", s):
         return f"{s[1]}I"
 
+    if re.fullmatch(r"\dW", s):
+        return s
+    if re.fullmatch(r"\dH", s):
+        return s
+    if re.fullmatch(r"\dI", s):
+        return s
+
     aliases = {
-        "DRIVER": "DR",
         "3 WOOD": "3W",
         "4 WOOD": "4W",
         "5 WOOD": "5W",
         "7 WOOD": "7W",
+        "9 WOOD": "9W",
         "2 HYBRID": "2H",
         "3 HYBRID": "3H",
         "4 HYBRID": "4H",
         "5 HYBRID": "5H",
+        "6 HYBRID": "6H",
+        "2 IRON": "2I",
         "3 IRON": "3I",
         "4 IRON": "4I",
         "5 IRON": "5I",
@@ -115,8 +128,11 @@ def normalize_club_label(label: str) -> str:
         "9 IRON": "9I",
         "P WEDGE": "PW",
         "G WEDGE": "GW",
+        "A WEDGE": "GW",
+        "APPROACH WEDGE": "GW",
         "S WEDGE": "SW",
         "L WEDGE": "LW",
+        "PUTTER": "PT",
     }
     if s in aliases:
         return aliases[s]
@@ -784,7 +800,7 @@ class ClubSummary:
 def summarize_by_club(canon_df: pd.DataFrame) -> Dict[str, ClubSummary]:
     summaries: Dict[str, ClubSummary] = {}
     for club_id, g in canon_df.groupby("club_id"):
-        if club_id == "OTHER":
+        if club_id in {"OTHER", "PT"}:
             continue
         summaries[club_id] = ClubSummary(
             club_id=club_id,

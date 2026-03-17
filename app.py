@@ -414,19 +414,53 @@ def _fmt_diff(value, decimals: int = 1, suffix: str = "") -> str:
     return f"{value:+.{decimals}f}{suffix}"
 
 
+def _normalize_club_id(club_id: str) -> str:
+    if club_id is None:
+        return ""
+
+    c = str(club_id).strip().upper()
+
+    # Convert prefix iron/hybrid/wood styles to suffix styles
+    # I4 -> 4I, H3 -> 3H, W3 -> 3W
+    if len(c) >= 2 and c[0] in {"I", "H", "W"} and c[1:].isdigit():
+        c = f"{c[1:]}{c[0]}"
+
+    return c
+
+
+def _is_iron_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return len(c) >= 2 and c[:-1].isdigit() and c.endswith("I")
+
+
+def _is_wood_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return len(c) >= 2 and c[:-1].isdigit() and c.endswith("W")
+
+
+def _is_hybrid_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return len(c) >= 2 and c[:-1].isdigit() and c.endswith("H")
+
+
+def _is_wedge_id(club_id: str) -> bool:
+    c = _normalize_club_id(club_id)
+    return c in {"PW", "GW", "AW", "UW", "SW", "LW"}
+
+
 def _club_family_from_id(club_id: str) -> str:
-    c = str(club_id).upper().strip()
+    c = _normalize_club_id(club_id)
 
     if c == "DR":
         return "Driver"
-    if c in WEDGE_CODES:
-        return "Wedge"
-    if c in FAIRWAY_CODES:
+    if _is_wood_id(c):
         return "Fairway Wood"
-    if c in HYBRID_CODES:
+    if _is_hybrid_id(c):
         return "Hybrid"
-    if c.endswith("I"):
+    if _is_iron_id(c):
         return "Iron"
+    if _is_wedge_id(c):
+        return "Wedge"
     return "Other"
 
 
@@ -443,15 +477,17 @@ def _club_sort_key(club_id: str):
 
 
 def _default_loft_for_club(club_id: str) -> float:
+    c = _normalize_club_id(club_id)
+
     mapping = {
         "DR": 10.0,
         "2W": 13.0, "3W": 15.0, "4W": 16.5, "5W": 18.0, "7W": 21.0,
         "2H": 17.0, "3H": 19.0, "4H": 21.0, "5H": 24.0,
         "3I": 21.0, "4I": 24.0, "5I": 27.0, "6I": 30.0,
         "7I": 34.0, "8I": 38.0, "9I": 42.0,
-        "PW": 46.0, "AW": 48.0, "GW": 50.0, "SW": 54.0, "LW": 58.0,
+        "PW": 46.0, "GW": 50.0, "AW": 50.0, "UW": 52.0, "SW": 54.0, "LW": 58.0,
     }
-    return mapping.get(club_id, 20.0)
+    return mapping.get(c, 20.0)
 
 
 def _model_options_for_family(brand: str, family: str) -> List[str]:
@@ -467,18 +503,18 @@ def _model_options_for_family(brand: str, family: str) -> List[str]:
 
 
 def _available_families_from_clubs(selected_clubs: List[str]) -> List[str]:
-    clubs = {str(c).upper().strip() for c in selected_clubs}
+    clubs = [_normalize_club_id(c) for c in selected_clubs]
 
     families_present = []
-    if "DR" in clubs:
+    if any(c == "DR" for c in clubs):
         families_present.append("Driver")
-    if any(c in FAIRWAY_CODES for c in clubs):
+    if any(_is_wood_id(c) for c in clubs):
         families_present.append("Fairway Wood")
-    if any(c in HYBRID_CODES for c in clubs):
+    if any(_is_hybrid_id(c) for c in clubs):
         families_present.append("Hybrid")
-    if any(c.endswith("I") for c in clubs):
+    if any(_is_iron_id(c) for c in clubs):
         families_present.append("Iron")
-    if any(c in WEDGE_CODES for c in clubs):
+    if any(_is_wedge_id(c) for c in clubs):
         families_present.append("Wedge")
 
     return families_present
@@ -550,8 +586,40 @@ def _render_stat_card(label: str, value: str):
 # =========================================================
 # FOCUS PICKER
 # =========================================================
-def _render_focus_picker(selected_clubs: List[str], club_counts: Dict[str, int]) -> str:
-    families_present = _available_families_from_clubs(selected_clubs)
+def _club_sort_key(club_id: str):
+    c = _normalize_club_id(club_id)
+
+    if c == "DR":
+        return (0, 0)
+
+    if _is_wood_id(c):
+        return (1, int(c[:-1]))
+
+    if _is_hybrid_id(c):
+        return (2, int(c[:-1]))
+
+    if _is_iron_id(c):
+        return (3, int(c[:-1]))
+
+    wedge_order = {
+        "PW": 0,
+        "GW": 1,
+        "AW": 2,
+        "UW": 3,
+        "SW": 4,
+        "LW": 5,
+    }
+    if _is_wedge_id(c):
+        return (4, wedge_order.get(c, 99))
+
+    return (9, 999)
+
+
+def _render_focus_picker(selected_clubs: List[str]):
+    normalized_map = {_normalize_club_id(c): c for c in selected_clubs}
+    normalized_clubs = list(normalized_map.keys())
+
+    families_present = _available_families_from_clubs(normalized_clubs)
 
     if not families_present:
         st.warning("No supported club data found.")
@@ -561,40 +629,46 @@ def _render_focus_picker(selected_clubs: List[str], club_counts: Dict[str, int])
         st.session_state["selected_focus_family"] = families_present[0]
 
     st.markdown('<div class="fc-card">', unsafe_allow_html=True)
-    st.markdown("### Choose Fitting Focus")
+    st.subheader("Choose Fitting Focus")
 
-    st.session_state["selected_focus_family"] = st.radio(
-        "Club family",
-        families_present,
-        horizontal=True,
-        index=families_present.index(st.session_state["selected_focus_family"]),
-        label_visibility="collapsed",
-    )
+    if len(families_present) > 1:
+        st.session_state["selected_focus_family"] = st.radio(
+            "What are we fitting today?",
+            families_present,
+            horizontal=True,
+            index=families_present.index(st.session_state["selected_focus_family"]),
+        )
+    else:
+        st.session_state["selected_focus_family"] = families_present[0]
+        st.caption(f"Detected focus: {families_present[0]}")
 
     family = st.session_state["selected_focus_family"]
-    family_clubs = _clubs_for_family(selected_clubs, family)
 
-    if not family_clubs:
-        st.warning("No clubs found in that family.")
-        st.stop()
+    if family == "Driver":
+        available = [c for c in normalized_clubs if c == "DR"]
+    elif family == "Fairway Wood":
+        available = [c for c in normalized_clubs if _is_wood_id(c)]
+    elif family == "Hybrid":
+        available = [c for c in normalized_clubs if _is_hybrid_id(c)]
+    elif family == "Iron":
+        available = [c for c in normalized_clubs if _is_iron_id(c)]
+    else:
+        available = [c for c in normalized_clubs if _is_wedge_id(c)]
 
-    if st.session_state["selected_focus_club"] not in family_clubs:
-        st.session_state["selected_focus_club"] = family_clubs[0]
+    available = sorted(available, key=_club_sort_key)
 
-    option_labels = [f"{c} ({club_counts.get(c, 0)} shots)" for c in family_clubs]
-    label_to_club = dict(zip(option_labels, family_clubs))
+    if st.session_state["selected_focus_club"] not in available:
+        st.session_state["selected_focus_club"] = available[0]
 
-    current_label = next(
-        (lbl for lbl, cid in label_to_club.items() if cid == st.session_state["selected_focus_club"]),
-        option_labels[0],
-    )
-
-    chosen_label = st.selectbox(
-        "Choose club",
-        option_labels,
-        index=option_labels.index(current_label),
-    )
-    st.session_state["selected_focus_club"] = label_to_club[chosen_label]
+    if len(available) > 1:
+        st.session_state["selected_focus_club"] = st.selectbox(
+            "Choose club",
+            available,
+            index=available.index(st.session_state["selected_focus_club"]),
+        )
+    else:
+        st.session_state["selected_focus_club"] = available[0]
+        st.caption(f"Detected club: {available[0]}")
 
     st.markdown("</div>", unsafe_allow_html=True)
     return st.session_state["selected_focus_club"]

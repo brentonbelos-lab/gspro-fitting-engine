@@ -1227,6 +1227,197 @@ def _settings_block(
     )
 
 
+
+def _delivery_consistency_ok(summary: ClubSummary, family: str) -> bool:
+    if family == "Driver":
+        return (
+            (np.isnan(summary.vla_std) or summary.vla_std <= 2.4)
+            and (np.isnan(summary.spin_std) or summary.spin_std <= 850)
+            and (np.isnan(summary.offline_std) or summary.offline_std <= 16)
+        )
+    return (
+        (np.isnan(summary.vla_std) or summary.vla_std <= 2.2)
+        and (np.isnan(summary.spin_std) or summary.spin_std <= 800)
+        and (np.isnan(summary.offline_std) or summary.offline_std <= 14)
+    )
+
+
+def _strike_efficiency_ok(summary: ClubSummary, family: str) -> bool:
+    if np.isnan(summary.smash_avg):
+        return False
+    if family == "Driver":
+        return summary.smash_avg >= _smash_floor_driver(summary.club_speed_avg) - 0.02
+    if family in {"Fairway Wood", "Hybrid"}:
+        return summary.smash_avg >= 1.38
+    if family == "Iron":
+        return summary.smash_avg >= 1.30
+    return summary.smash_avg >= 1.20
+
+
+def _head_or_shaft_direction_driver(
+    summary: ClubSummary,
+    signal_counts: Dict[str, int],
+    current_setup_good: bool,
+    ball_speed_status: str,
+    fairway_hit_pct: Optional[float],
+) -> RecommendationBlock:
+    family = "Driver"
+    strike_ok = _strike_efficiency_ok(summary, family)
+    consistency_ok = _delivery_consistency_ok(summary, family)
+
+    if current_setup_good:
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Current driver setup looks good. No strong head or shaft change stands out from this sample.",
+            why="The launch, spin, and playable flight window are close enough that FitCaddie would leave this alone for now.",
+            tone="green",
+        )
+
+    if not strike_ok and ball_speed_status == "low":
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="No clear head-or-shaft recommendation yet. Check strike and settings first.",
+            why="Strike efficiency is not strong enough yet to cleanly isolate whether the bigger issue is the head, the shaft, or simply impact quality.",
+            tone="yellow",
+        )
+
+    if fairway_hit_pct is not None and not np.isnan(fairway_hit_pct) and fairway_hit_pct < 60:
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Head-first test: a more forgiving driver head or more stable total build may help more than a shaft-only change.",
+            why="The bigger miss pattern is playable control, which usually points toward forgiveness and head/build stability before a profile-only shaft change.",
+            tone="yellow",
+        )
+
+    if signal_counts["low_flight"] >= 3:
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Head-first test: look for more launch help from loft/head design before assuming the shaft is the main issue.",
+            why="The flight is coming out too flat in multiple ways, and that usually points more toward head/loft help than a pure shaft answer.",
+            tone="green",
+        )
+
+    if signal_counts["high_flight"] >= 2 and strike_ok and consistency_ok:
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Shaft-first test: after hosel testing, a firmer or lower-launch/lower-spin shaft profile could be worth testing.",
+            why="Strike and delivery look stable enough that the remaining issue looks more like flight-profile tuning than a head forgiveness problem.",
+            tone="yellow",
+        )
+
+    if signal_counts["low_flight"] >= 2 and strike_ok and consistency_ok:
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Shaft-second, head-check path: test hosel first, then compare a slightly higher-launch shaft only if the head/loft window still looks too flat.",
+            why="There is a real low-flight pattern, but not enough evidence yet to blame the shaft before settings and head/loft are checked.",
+            tone="green",
+        )
+
+    return RecommendationBlock(
+        title="Equipment Direction",
+        suggestion="No isolated head-or-shaft recommendation yet. Test settings first and collect a few more shots.",
+        why="The pattern is not clean enough yet to say the head or shaft is the main lever.",
+        tone="green",
+    )
+
+
+def _head_or_shaft_direction_non_driver(
+    summary: ClubSummary,
+    family: str,
+    signal_counts: Dict[str, int],
+    current_setup_good: bool,
+    ball_speed_status: str,
+    shaft_weight_g: Optional[float],
+) -> RecommendationBlock:
+    strike_ok = _strike_efficiency_ok(summary, family)
+    consistency_ok = _delivery_consistency_ok(summary, family)
+
+    if current_setup_good:
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Current setup looks good. No strong head or shaft change stands out from this data.",
+            why="The club is already in a playable enough flight window for its speed and intended job.",
+            tone="green",
+        )
+
+    if not strike_ok and ball_speed_status == "low":
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="No clear head-or-shaft recommendation yet. Check strike and settings first.",
+            why="Strike efficiency is not strong enough yet to cleanly separate a head issue from a shaft issue.",
+            tone="yellow",
+        )
+
+    if family in {"Fairway Wood", "Hybrid"}:
+        if signal_counts["low_flight"] >= 3:
+            return RecommendationBlock(
+                title="Equipment Direction",
+                suggestion="Head-first test: this looks more like a loft/head-launch issue than a shaft-first issue.",
+                why="The flight is too flat in multiple ways, and for woods/hybrids that usually means more help from loft or head design before shaft fine-tuning.",
+                tone="green",
+            )
+
+        if signal_counts["high_flight"] >= 2 and strike_ok and consistency_ok:
+            return RecommendationBlock(
+                title="Equipment Direction",
+                suggestion="Shaft-first test: after hosel testing, a firmer or lower-launch profile could be worth testing.",
+                why="The remaining issue looks more like profile control than a need for more head help.",
+                tone="yellow",
+            )
+
+        if signal_counts["low_flight"] >= 2 and strike_ok and consistency_ok:
+            return RecommendationBlock(
+                title="Equipment Direction",
+                suggestion="Head-first, then shaft path: test more loft or a higher-launching head first, then only test shaft if the club still flies too flat.",
+                why="For fairway woods and hybrids, peak height and descent usually point to head/loft fit before shaft fit.",
+                tone="green",
+            )
+
+        if shaft_weight_g is not None and not np.isnan(float(shaft_weight_g)) and summary.offline_avg > 5:
+            return RecommendationBlock(
+                title="Equipment Direction",
+                suggestion="Shaft-first test: a slightly heavier or more stable shaft build may be worth testing.",
+                why="The flight window is not the main problem here; playable control and timing look like the bigger issue.",
+                tone="green",
+            )
+
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="No isolated head-or-shaft recommendation yet. Test settings first and collect a few more shots.",
+            why="This sample does not cleanly separate a head issue from a shaft issue yet.",
+            tone="green",
+        )
+
+    if family == "Iron":
+        if signal_counts["low_flight"] >= 2:
+            return RecommendationBlock(
+                title="Equipment Direction",
+                suggestion="Head-first test: this iron flight looks more like a loft/head-launch issue than a shaft-first issue.",
+                why="When irons fly too flat, stopping power usually points more toward loft, head design, or launch help than a profile-only shaft answer.",
+                tone="yellow",
+            )
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="No strong head-or-shaft recommendation stands out yet.",
+            why="The sample does not show a clean enough pattern to isolate the equipment answer.",
+            tone="green",
+        )
+
+    if family == "Wedge":
+        return RecommendationBlock(
+            title="Equipment Direction",
+            suggestion="Head/loft and strike matter more than shaft here.",
+            why="For wedges, launch, spin, loft, groove condition, and strike usually explain more than shaft profile does.",
+            tone="yellow",
+        )
+
+    return RecommendationBlock(
+        title="Equipment Direction",
+        suggestion="No strong head-or-shaft recommendation stands out yet.",
+        why="The pattern is not clean enough yet to isolate the equipment answer.",
+        tone="green",
+    )
+
 def _equipment_block_driver(
     summary: ClubSummary,
     user_setup: DriverUserSetup,
@@ -1242,51 +1433,13 @@ def _equipment_block_driver(
     ball_speed_status: str,
     fairway_hit_pct: Optional[float],
 ) -> RecommendationBlock:
-    profile = tuning_profile_for_club("DR")
-
-    if current_setup_good:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="Your current driver setup looks good. No strong head or shaft change stands out from this sample.",
-            why="The driver is already in a playable enough launch and spin window, so no major spec change stands out.",
-            tone="green",
-        )
-    if ball_speed_status == "low" and not np.isnan(summary.smash_avg) and summary.smash_avg < _smash_floor_driver(summary.club_speed_avg):
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="Do not rush into an equipment change yet. Test strike and settings first.",
-            why="This looks more like a strike-efficiency issue than a clear head-or-shaft fit problem.",
-            tone="yellow",
-        )
-
     signal_counts = _spec_signal_counts(summary, "DR", launch_lo, launch_hi, spin_lo, spin_hi, peak_lo, peak_hi, desc_lo, desc_hi)
-
-    if signal_counts["low_flight"] >= profile.min_spec_signals:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="There is more evidence here for added launch help than for a major equipment change. Test hosel first, then decide whether head or shaft testing is still needed.",
-            why="The driver flight is flatter than ideal, but the simplest reversible change still comes first.",
-            tone="green",
-        )
-    if signal_counts["high_flight"] >= profile.min_spec_signals:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="After hosel testing, more controlled flight could be worth testing through head or shaft changes.",
-            why="Multiple flight signals agree that the ball is climbing more than ideal.",
-            tone="yellow",
-        )
-    if fairway_hit_pct is not None and not np.isnan(fairway_hit_pct) and fairway_hit_pct < 60:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="A more forgiving head or a more stable overall build may help more than a flex change alone.",
-            why="The bigger issue looks like playable control, not simply stiffness.",
-            tone="yellow",
-        )
-    return RecommendationBlock(
-        title="Equipment Adjustment",
-        suggestion="Your current setup is close enough that we would test very cautiously before buying anything.",
-        why="There is not enough agreement in the data to justify an aggressive shaft recommendation.",
-        tone="green",
+    return _head_or_shaft_direction_driver(
+        summary=summary,
+        signal_counts=signal_counts,
+        current_setup_good=current_setup_good,
+        ball_speed_status=ball_speed_status,
+        fairway_hit_pct=fairway_hit_pct,
     )
 
 
@@ -1307,84 +1460,14 @@ def _equipment_block_non_driver(
     desc_hi: float,
     ball_speed_status: str,
 ) -> RecommendationBlock:
-    profile = tuning_profile_for_club(summary.club_id)
-
-    if current_setup_good:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="Your current setup looks good. No strong head or shaft change stands out from this data.",
-            why="This club is already in a healthy enough playable window for its speed.",
-            tone="green",
-        )
-    if ball_speed_status == "low" and not np.isnan(summary.smash_avg) and summary.smash_avg < 1.30:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="We would not rush to a head or shaft change yet.",
-            why="The bigger limiter appears to be strike efficiency rather than a clear spec mismatch.",
-            tone="yellow",
-        )
-
     signal_counts = _spec_signal_counts(summary, summary.club_id, launch_lo, launch_hi, spin_lo, spin_hi, peak_lo, peak_hi, desc_lo, desc_hi)
-
-    if family in {"Fairway Wood", "Hybrid"}:
-        if signal_counts["low_flight"] >= profile.min_spec_signals:
-            return RecommendationBlock(
-                title="Equipment Adjustment",
-                suggestion="Test more loft first. If the flight still stays too flat, then a softer or higher-launch shaft profile may be worth testing.",
-                why="Multiple signals agree the flight is flatter than ideal, and height / stopping power matter most in this category.",
-                tone="green",
-            )
-        if signal_counts["high_flight"] >= profile.min_spec_signals:
-            return RecommendationBlock(
-                title="Equipment Adjustment",
-                suggestion="After hosel testing, a firmer or lower-launch profile could be worth testing.",
-                why="Multiple signals agree the flight is climbing too much relative to speed.",
-                tone="yellow",
-            )
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="This setup is close enough that we would avoid a major spec recommendation from this sample alone.",
-            why="A small miss in one metric is not enough by itself to justify a shaft or head change.",
-            tone="green",
-        )
-
-    if family == "Iron":
-        if signal_counts["low_flight"] >= profile.min_spec_signals:
-            return RecommendationBlock(
-                title="Equipment Adjustment",
-                suggestion="This iron flight is a little too flat for your speed. Look at loft, launch profile, or head design before assuming the current build is ideal.",
-                why="Stopping power matters more than squeezing one more yard out of an iron.",
-                tone="yellow",
-            )
-        if not np.isnan(summary.spin_avg) and summary.spin_avg < spin_lo:
-            return RecommendationBlock(
-                title="Equipment Adjustment",
-                suggestion="The numbers suggest more help from launch/spin than from added stiffness.",
-                why="This looks more like a flat-flight issue than a need for a firmer shaft.",
-                tone="yellow",
-            )
-
-    if family == "Wedge":
-        if signal_counts["low_flight"] >= profile.min_spec_signals or (not np.isnan(summary.spin_avg) and summary.spin_avg < spin_lo):
-            return RecommendationBlock(
-                title="Equipment Adjustment",
-                suggestion="Check loft, ball choice, groove condition, and strike before making a shaft recommendation.",
-                why="For wedges, stopping power matters more than chasing shaft changes.",
-                tone="yellow",
-            )
-
-    if shaft_weight_g is not None and not np.isnan(float(shaft_weight_g)) and summary.offline_avg > 5:
-        return RecommendationBlock(
-            title="Equipment Adjustment",
-            suggestion="A slightly heavier build may be worth testing before a big flex change.",
-            why="Tempo and face control can improve with a slightly more stable build.",
-            tone="green",
-        )
-    return RecommendationBlock(
-        title="Equipment Adjustment",
-        suggestion="Test before buying. Start with the simplest and most reversible change first.",
-        why="There is a pattern worth monitoring, but not enough evidence to force a major purchase.",
-        tone="green",
+    return _head_or_shaft_direction_non_driver(
+        summary=summary,
+        family=family,
+        signal_counts=signal_counts,
+        current_setup_good=current_setup_good,
+        ball_speed_status=ball_speed_status,
+        shaft_weight_g=shaft_weight_g,
     )
 
 

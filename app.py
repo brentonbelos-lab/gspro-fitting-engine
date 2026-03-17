@@ -249,16 +249,23 @@ def _fmt(value, decimals=1, suffix=""):
 
 
 def _club_family_from_id(club_id: str) -> str:
+    club_id = str(club_id).upper().strip()
+
     if club_id == "DR":
         return "Driver"
+
+    if club_id in {"PW", "GW", "AW", "SW", "LW"}:
+        return "Wedge"
+
     if club_id.endswith("W"):
         return "Fairway Wood"
+
     if club_id.endswith("H"):
         return "Hybrid"
+
     if club_id.endswith("I"):
         return "Iron"
-    if club_id in {"PW", "GW", "SW", "LW"}:
-        return "Wedge"
+
     return "Other"
 
 

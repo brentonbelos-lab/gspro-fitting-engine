@@ -711,6 +711,18 @@ def _available_families_from_clubs(selected_clubs: List[str]) -> List[str]:
     return families_present
 
 
+def _club_sort_key(club_id: str):
+    order = {
+        "DR": 0,
+        "2W": 1, "3W": 2, "4W": 3, "5W": 4, "7W": 5, "9W": 6,
+        "2H": 10, "3H": 11, "4H": 12, "5H": 13, "6H": 14,
+        "3I": 20, "4I": 21, "5I": 22, "6I": 23, "7I": 24, "8I": 25, "9I": 26,
+        "PW": 30, "AW": 31, "GW": 32, "SW": 33, "LW": 34,
+        "PT": 99,
+    }
+    return order.get(str(club_id).upper().strip(), 999)
+
+    
 def _render_focus_picker(selected_clubs: List[str]):
     families_present = _available_families_from_clubs(selected_clubs)
 
@@ -1147,6 +1159,8 @@ if analysis_mode == "Single Club Analysis":
         st.warning(f"No clubs have at least {min_shots} shots. Try lowering the filter or collect more data.")
         st.stop()
 
+    club_ids = sorted(club_ids, key=_club_sort_key)
+    
     focus_club = _render_focus_picker(club_ids)
     focus_df = canon_df[canon_df["club_id"] == focus_club].copy()
 

@@ -820,11 +820,22 @@ def _render_hosel_block(club_id: str, title: str, k_loft_to_dynamic: float) -> D
         )
 
     with c4:
-        default_loft = _default_loft_for_club(club_id)
+        default_loft = float(_default_loft_for_club(club_id))
+
+        # Safe range for adjustable top-end clubs
+        if family == "Driver":
+            min_loft, max_loft = 6.0, 15.0
+        elif family == "Fairway Wood":
+            min_loft, max_loft = 12.0, 24.0
+        else:  # Hybrid
+            min_loft, max_loft = 16.0, 30.0
+
+        default_loft = max(min_loft, min(default_loft, max_loft))
+
         stated_loft = st.number_input(
             f"{club_id} Stated Loft (°)",
-            min_value=0.0,
-            max_value=30.0,
+            min_value=float(min_loft),
+            max_value=float(max_loft),
             value=float(default_loft),
             step=0.5,
             key=f"{club_id}_loft",

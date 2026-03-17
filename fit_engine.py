@@ -1247,15 +1247,15 @@ def _equipment_block_driver(
     if current_setup_good:
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="Your current driver setup looks good. We do not see strong evidence here for moving stiffer or softer.",
+            suggestion="Your current driver setup looks good. No strong head or shaft change stands out from this sample.",
             why="The driver is already in a playable enough launch and spin window, so no major spec change stands out.",
             tone="green",
         )
     if ball_speed_status == "low" and not np.isnan(summary.smash_avg) and summary.smash_avg < _smash_floor_driver(summary.club_speed_avg):
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="Do not rush into a shaft change yet.",
-            why="This looks more like a strike-efficiency issue than a clear fit problem.",
+            suggestion="Do not rush into an equipment change yet. Test strike and settings first.",
+            why="This looks more like a strike-efficiency issue than a clear head-or-shaft fit problem.",
             tone="yellow",
         )
 
@@ -1264,14 +1264,14 @@ def _equipment_block_driver(
     if signal_counts["low_flight"] >= profile.min_spec_signals:
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="There is more evidence here for added launch help than for added stiffness. Test hosel first, then a slightly softer or higher-launch profile only if needed.",
+            suggestion="There is more evidence here for added launch help than for a major equipment change. Test hosel first, then decide whether head or shaft testing is still needed.",
             why="The driver flight is flatter than ideal, but the simplest reversible change still comes first.",
             tone="green",
         )
     if signal_counts["high_flight"] >= profile.min_spec_signals:
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="After hosel testing, a firmer or lower-launch profile could be worth testing.",
+            suggestion="After hosel testing, more controlled flight could be worth testing through head or shaft changes.",
             why="Multiple flight signals agree that the ball is climbing more than ideal.",
             tone="yellow",
         )
@@ -1312,14 +1312,14 @@ def _equipment_block_non_driver(
     if current_setup_good:
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="Your current setup looks good. No strong equipment change stands out from this data.",
+            suggestion="Your current setup looks good. No strong head or shaft change stands out from this data.",
             why="This club is already in a healthy enough playable window for its speed.",
             tone="green",
         )
     if ball_speed_status == "low" and not np.isnan(summary.smash_avg) and summary.smash_avg < 1.30:
         return RecommendationBlock(
             title="Equipment Adjustment",
-            suggestion="We would not rush to a shaft change yet.",
+            suggestion="We would not rush to a head or shaft change yet.",
             why="The bigger limiter appears to be strike efficiency rather than a clear spec mismatch.",
             tone="yellow",
         )

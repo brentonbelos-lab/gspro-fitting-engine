@@ -862,6 +862,212 @@ class RecommendationBundle:
     debug: Dict[str, float]
 
 
+
+
+# =========================================================
+# Setup scoring / ranking helpers
+# =========================================================
+@dataclass
+class SetupScore:
+    label: str
+    total_score: float
+    carry_score: float
+    dispersion_score: float
+    spin_score: float
+    launch_score: float
+    strike_score: float
+    shot_count: int
+
+
+@dataclass
+class SetupRankingResult:
+    ranked: List[SetupScore]
+    best: SetupScore
+    second: Optional[SetupScore]
+    gap_to_second: float
+    gap_to_baseline: float
+    verdict: str
+    confidence: str
+
+
+def _score_by_distance_to_window(value: float, low: float, high: float, half_penalty_step: float) -> float:
+    if np.isnan(value):
+        return 0.0
+    if low <= value <= high:
+        center = (low + high) / 2.0
+        room = max((high - low) / 2.0, 1e-9)
+        center_bonus = 10.0 * max(0.0, 1.0 - abs(value - center) / room)
+        return min(100.0, 90.0 + center_bonus)
+
+    dist = low - value if value < low else value - high
+    penalty_units = dist / max(half_penalty_step, 1e-9)
+    return max(0.0, 90.0 - 12.0 * penalty_units)
+
+
+def _driver_target_windows_from_speed(club_speed_avg: float) -> Dict[str, Tuple[float, float]]:
+    if np.isnan(club_speed_avg):
+        return {"launch": (12.0, 14.0), "spin": (2300.0, 2800.0)}
+    if club_speed_avg < 90:
+        return {"launch": (14.0, 17.0), "spin": (2600.0, 3400.0)}
+    if club_speed_avg < 100:
+        return {"launch": (12.5, 15.5), "spin": (2300.0, 3200.0)}
+    if club_speed_avg < 110:
+        return {"launch": (11.0, 14.0), "spin": (2000.0, 2900.0)}
+    return {"launch": (10.0, 13.0), "spin": (1800.0, 2700.0)}
+
+
+def score_driver_setup(summary: ClubSummary, label: str = "") -> SetupScore:
+    windows = _driver_target_windows_from_speed(summary.club_speed_avg)
+    launch_lo, launch_hi = windows["launch"]
+    spin_lo, spin_hi = windows["spin"]
+
+    carry_score = 0.0 if np.isnan(summary.carry_avg) else float(summary.carry_avg)
+
+    if np.isnan(summary.offline_std):
+        dispersion_score = 0.0
+    else:
+        dispersion_score = max(0.0, min(100.0, 120.0 - summary.offline_std * 5.0))
+
+    spin_score = _score_by_distance_to_window(summary.spin_avg, spin_lo, spin_hi, 250.0)
+    launch_score = _score_by_distance_to_window(summary.vla_avg, launch_lo, launch_hi, 0.75)
+
+    smash_target = _smash_floor_driver(summary.club_speed_avg)
+    if np.isnan(summary.smash_avg):
+        strike_score = 0.0
+    elif summary.smash_avg >= smash_target:
+        strike_score = min(100.0, 90.0 + (summary.smash_avg - smash_target) * 250.0)
+    else:
+        strike_score = max(0.0, 90.0 - (smash_target - summary.smash_avg) * 450.0)
+
+    total = (
+        carry_score * 0.25
+        + dispersion_score * 0.30
+        + spin_score * 0.20
+        + launch_score * 0.15
+        + strike_score * 0.10
+    )
+
+    if not np.isnan(summary.spin_std):
+        if summary.spin_std > 1000:
+            total -= 8.0
+        elif summary.spin_std > 800:
+            total -= 4.0
+
+    if not np.isnan(summary.vla_std):
+        if summary.vla_std > 3.0:
+            total -= 6.0
+        elif summary.vla_std > 2.2:
+            total -= 3.0
+
+    if summary.n < 6:
+        total -= 8.0
+    elif summary.n < 8:
+        total -= 4.0
+
+    total = max(0.0, total)
+
+    return SetupScore(
+        label=label,
+        total_score=round(total, 2),
+        carry_score=round(carry_score, 2),
+        dispersion_score=round(dispersion_score, 2),
+        spin_score=round(spin_score, 2),
+        launch_score=round(launch_score, 2),
+        strike_score=round(strike_score, 2),
+        shot_count=int(summary.n),
+    )
+
+
+def rank_driver_setup_summaries(
+    setup_summaries: Dict[str, ClubSummary],
+    baseline_label: Optional[str] = None,
+) -> SetupRankingResult:
+    scored = [score_driver_setup(summary, label) for label, summary in setup_summaries.items()]
+    scored.sort(key=lambda x: x.total_score, reverse=True)
+
+    if not scored:
+        empty = SetupScore("No setup", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
+        return SetupRankingResult([empty], empty, None, 0.0, 0.0, "no_clear_winner", "low")
+
+    best = scored[0]
+    second = scored[1] if len(scored) > 1 else None
+    gap_to_second = round(best.total_score - (second.total_score if second else 0.0), 2)
+
+    baseline_score = None
+    if baseline_label is not None:
+        for s in scored:
+            if s.label == baseline_label:
+                baseline_score = s.total_score
+                break
+    gap_to_baseline = round(best.total_score - baseline_score, 2) if baseline_score is not None else gap_to_second
+
+    min_shots = min(s.shot_count for s in scored)
+    if min_shots >= 8:
+        confidence = "high"
+    elif min_shots >= 6:
+        confidence = "moderate"
+    else:
+        confidence = "low"
+
+    if baseline_label is not None and best.label != baseline_label:
+        if gap_to_baseline >= 8.0:
+            verdict = "recommend_change"
+        elif gap_to_baseline >= 4.0:
+            verdict = "test_to_confirm"
+        else:
+            verdict = "no_clear_winner"
+    else:
+        if gap_to_second >= 8.0:
+            verdict = "recommend_change"
+        elif gap_to_second >= 4.0:
+            verdict = "test_to_confirm"
+        else:
+            verdict = "no_clear_winner"
+
+    return SetupRankingResult(
+        ranked=scored,
+        best=best,
+        second=second,
+        gap_to_second=gap_to_second,
+        gap_to_baseline=gap_to_baseline,
+        verdict=verdict,
+        confidence=confidence,
+    )
+
+
+def compare_recommendation_text(ranking: SetupRankingResult, baseline_label: Optional[str] = None) -> Dict[str, str]:
+    best = ranking.best
+    baseline_name = baseline_label or best.label
+
+    if ranking.verdict == "recommend_change":
+        return {
+            "tone": "green",
+            "title": "Best Overall Interpretation",
+            "suggestion": f"{best.label} is the stronger overall gamer. Move into this setup.",
+            "why": (
+                f"It separated itself with a meaningful scoring edge ({ranking.gap_to_baseline:.1f} points vs "
+                f"{baseline_name if best.label != baseline_name else 'the next-best setup'}) while holding together "
+                "carry, dispersion, launch, and spin well enough to justify a switch."
+            ),
+        }
+    if ranking.verdict == "test_to_confirm":
+        return {
+            "tone": "yellow",
+            "title": "Best Overall Interpretation",
+            "suggestion": f"{best.label} looks best so far, but repeat the test before making the move.",
+            "why": (
+                f"The edge is real but not huge ({ranking.gap_to_baseline:.1f} points), so one more session with fresh "
+                "swings is the right way to confirm the winner."
+            ),
+        }
+    return {
+        "tone": "yellow",
+        "title": "Best Overall Interpretation",
+        "suggestion": "There is no strong winner yet. Treat these setups as close for now.",
+        "why": "The scoring gap is too small to justify a firm gamer recommendation from this sample alone.",
+    }
+
+
 @dataclass
 class DriverCompareMetrics:
     label: str
@@ -910,9 +1116,17 @@ def compare_driver_setups(
     b_df: pd.DataFrame,
     label_a: str = "Setup A",
     label_b: str = "Setup B",
+    baseline_label: Optional[str] = None,
 ) -> Dict[str, object]:
     a = driver_metrics_from_df(a_df, label_a)
     b = driver_metrics_from_df(b_df, label_b)
+
+    summaries = {
+        label_a: summarize_by_club(a_df).get("DR"),
+        label_b: summarize_by_club(b_df).get("DR"),
+    }
+    summaries = {k: v for k, v in summaries.items() if v is not None}
+    ranking = rank_driver_setup_summaries(summaries, baseline_label=baseline_label)
 
     def better_high(x: float, y: float) -> str:
         if np.isnan(x) and np.isnan(y):
@@ -936,31 +1150,6 @@ def compare_driver_setups(
             return "Tie"
         return label_a if x < y else label_b
 
-    score_a = 0
-    score_b = 0
-    if better_high(a.carry, b.carry) == label_a:
-        score_a += 1
-    elif better_high(a.carry, b.carry) == label_b:
-        score_b += 1
-    if better_high(a.ball_speed, b.ball_speed) == label_a:
-        score_a += 1
-    elif better_high(a.ball_speed, b.ball_speed) == label_b:
-        score_b += 1
-    if better_low(a.offline, b.offline) == label_a:
-        score_a += 1
-    elif better_low(a.offline, b.offline) == label_b:
-        score_b += 1
-    if better_high(a.fairway_pct, b.fairway_pct) == label_a:
-        score_a += 1
-    elif better_high(a.fairway_pct, b.fairway_pct) == label_b:
-        score_b += 1
-
-    overall = "Tie"
-    if score_a > score_b:
-        overall = label_a
-    elif score_b > score_a:
-        overall = label_b
-
     return {
         "a": a,
         "b": b,
@@ -969,8 +1158,10 @@ def compare_driver_setups(
             "fastest_ball_speed": better_high(a.ball_speed, b.ball_speed),
             "straightest": better_low(a.offline, b.offline),
             "most_fairways": better_high(a.fairway_pct, b.fairway_pct),
-            "best_overall": overall,
+            "best_overall": ranking.best.label,
         },
+        "ranking": ranking,
+        "comparison_note": compare_recommendation_text(ranking, baseline_label=baseline_label),
     }
 
 

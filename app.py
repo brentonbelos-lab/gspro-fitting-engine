@@ -1463,11 +1463,16 @@ else:
         summary=summaries_a["DR"],
         user_setup=setup_a,
         fairway_hit_pct=float((dr_a["offline_yd"].dropna().abs() <= 15).mean() * 100.0) if len(dr_a["offline_yd"].dropna()) else None,
+        comparison_context=compare,
+        current_label="Setup A",
     )
+    
     rec_b = build_driver_recommendations(
         summary=summaries_b["DR"],
         user_setup=setup_b,
         fairway_hit_pct=float((dr_b["offline_yd"].dropna().abs() <= 15).mean() * 100.0) if len(dr_b["offline_yd"].dropna()) else None,
+        comparison_context=compare,
+        current_label="Setup B",
     )
 
     rc1, rc2 = st.columns(2)

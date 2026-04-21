@@ -23,6 +23,7 @@ from fit_engine import (
     build_non_driver_recommendations,
     canonicalize,
     compare_driver_setups,
+    rank_driver_setup_summaries,
     distance_potential_for_summary,
     estimate_launch_spin_change,
     miss_tendency,
@@ -1331,7 +1332,7 @@ else:
         st.warning("Both uploaded files need driver shots (DR) for compare mode.")
         st.stop()
 
-    compare = compare_driver_setups(dr_a, dr_b, "Setup A", "Setup B")
+    compare = compare_driver_setups(dr_a, dr_b, "Setup A", "Setup B", baseline_label="Setup A")
 
     st.markdown('<div class="fc-card"><h3>Compare Dispersion</h3>', unsafe_allow_html=True)
     render_compare_dispersion(
@@ -1410,6 +1411,33 @@ else:
     st.dataframe(metric_df, use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+    ranking = compare["ranking"]
+    leaderboard_df = pd.DataFrame(
+        [
+            {
+                "Rank": i + 1,
+                "Setup": s.label,
+                "Total Score": f"{s.total_score:.1f}",
+                "Carry": f"{s.carry_score:.1f}",
+                "Dispersion": f"{s.dispersion_score:.1f}",
+                "Spin Fit": f"{s.spin_score:.1f}",
+                "Launch Fit": f"{s.launch_score:.1f}",
+                "Strike": f"{s.strike_score:.1f}",
+                "Shots": s.shot_count,
+            }
+            for i, s in enumerate(ranking.ranked)
+        ]
+    )
+
+    st.markdown('<div class="fc-card"><h3>Setup Ranking</h3>', unsafe_allow_html=True)
+    st.dataframe(leaderboard_df, use_container_width=True, hide_index=True)
+    st.caption(
+        f"Confidence: {ranking.confidence}. "
+        f"Gap to winner: {ranking.gap_to_second:.1f} points. "
+        f"Gap vs current gamer (Setup A): {ranking.gap_to_baseline:.1f} points."
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
     winners = compare["winners"]
     st.markdown(
         f"""
@@ -1450,31 +1478,35 @@ else:
         st.markdown('<div class="fc-card"><h3>Setup B Recommendation</h3></div>', unsafe_allow_html=True)
         _render_recommendation_cards(rec_b)
 
-    best_overall = winners["best_overall"]
-    interpretation = []
-    if best_overall == "Setup A":
-        interpretation.append("Setup A looks like the stronger overall gamer from this test.")
-    elif best_overall == "Setup B":
-        interpretation.append("Setup B looks like the stronger overall gamer from this test.")
-    else:
-        interpretation.append("This comparison is close enough that neither setup clearly dominates overall.")
-
-    if winners["longest_carry"] != winners["straightest"]:
-        interpretation.append("One setup appears better for distance while the other appears better for control.")
-    else:
-        interpretation.append("The same setup appears to be winning both carry and dispersion, which is a strong sign.")
-
-    interpretation.append("Repeat the test on another day with 8–10 fresh shots per setup to confirm the winner.")
+    compare_note = compare["comparison_note"]
+    compare_tone_class = {
+        "green": "fc-rec-green",
+        "yellow": "fc-rec-yellow",
+        "red": "fc-rec-red",
+    }.get(compare_note["tone"], "fc-rec-yellow")
 
     st.markdown(
         f"""
-        <div class="fc-card">
-            <h3>Best Overall Interpretation</h3>
-            <p>{" ".join(interpretation)}</p>
+        <div class="{compare_tone_class}">
+            {_status_html(compare_note["tone"])}
+            <h3>{compare_note["title"]}</h3>
+            <p><strong>Suggestion:</strong> {compare_note["suggestion"]}</p>
+            <p><strong>Why:</strong> {compare_note["why"]}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+    if ranking.verdict != "recommend_change":
+        st.markdown(
+            """
+            <div class="fc-card">
+                <h3>Retest Guidance</h3>
+                <p>Repeat the comparison on another day with 8–10 fresh shots per setup. Keep tee height, warm-up, and target line the same so the winner is easier to trust.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 st.divider()
 st.caption("Next smart upgrade: add a confidence label like high / moderate / low confidence to each recommendation set.")

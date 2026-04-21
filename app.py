@@ -1455,10 +1455,10 @@ else:
 
     setup_a = _driver_setup_from_prefix("cmpA")
     setup_b = _driver_setup_from_prefix("cmpB")
-
+    
     summaries_a = summarize_by_club(dr_a)
     summaries_b = summarize_by_club(dr_b)
-
+    
     rec_a = build_driver_recommendations(
         summary=summaries_a["DR"],
         user_setup=setup_a,

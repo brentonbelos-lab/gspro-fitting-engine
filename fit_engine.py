@@ -1391,6 +1391,28 @@ def _settings_block(
             tone="green",
         )
     if current_setup_good:
+        if comparison_context is not None and current_label is not None:
+            ranking = comparison_context.get("ranking")
+            if ranking is not None and ranking.best.label != current_label:
+                best_label = ranking.best.label
+
+                if current_label == "Setup A" and best_label == "Setup B":
+                    if not np.isnan(summary.vla_avg) and not np.isnan(summary.spin_avg):
+                        if summary.vla_avg <= launch_hi and summary.spin_avg >= spin_lo:
+                            return RecommendationBlock(
+                                title="Club Settings",
+                                suggestion="Test a slightly higher-loft or more upright hosel setting.",
+                                why="Your current setting is playable, but the other tested setup performed better overall. That suggests there is still room for improvement through a more launch-friendly or upright setting.",
+                                tone="green",
+                            )
+
+                return RecommendationBlock(
+                    title="Club Settings",
+                    suggestion="Your current setting is playable, but it was outperformed in this comparison.",
+                    why=f"{best_label} produced the stronger overall result, so the current setting should not automatically be treated as optimal.",
+                    tone="yellow",
+                )
+
         return RecommendationBlock(
             title="Club Settings",
             suggestion=f"Stay with the current setting{current_txt} for now.",

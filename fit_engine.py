@@ -1375,6 +1375,8 @@ def _settings_block(
     desc_lo: float,
     desc_hi: float,
     current_setup_good: bool,
+    comparison_context: Optional[dict] = None,
+    current_label: Optional[str] = None,
 ) -> RecommendationBlock:
     family = club_family(club_id)
     adjustable = family in {"Driver", "Fairway Wood", "Hybrid"}
@@ -1685,6 +1687,8 @@ def build_driver_recommendations(
     summary: ClubSummary,
     user_setup: DriverUserSetup,
     fairway_hit_pct: Optional[float] = None,
+    comparison_context: Optional[dict] = None,
+    current_label: Optional[str] = None,
 ) -> RecommendationBundle:
     tgt = interpolated_targets_for_club("DR", summary.club_speed_avg)
 
@@ -1715,6 +1719,8 @@ def build_driver_recommendations(
         desc_lo=desc_lo,
         desc_hi=desc_hi,
         current_setup_good=current_setup_good,
+        comparison_context=comparison_context,
+        current_label=current_label,
     )
 
     equipment_adjustment = _equipment_block_driver(

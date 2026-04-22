@@ -23,11 +23,11 @@ from fit_engine import (
     build_non_driver_recommendations,
     canonicalize,
     compare_driver_setups,
-    rank_driver_setup_summaries,
     distance_potential_for_summary,
     estimate_launch_spin_change,
     miss_tendency,
     pick_one_hosel_setting,
+    score_driver_setup,
     shot_shape_summary,
     smash_flag_driver,
     summarize_by_club,
@@ -735,6 +735,42 @@ def _render_summary_cards(summary, focus_df: pd.DataFrame):
         )
 
 
+def _render_single_setup_score(focus_summary):
+    if focus_summary.club_id != "DR":
+        return
+
+    score = score_driver_setup(focus_summary, label="Current Setup")
+
+    st.markdown(
+        """
+        <div class="fc-card" style="margin-top:10px;">
+            <h4 style="margin-bottom:8px;">Setup Score</h4>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.metric("Total Score", f"{score.total_score:.1f}")
+    with c2:
+        if score.total_score >= 95:
+            st.success("Highly optimized")
+        elif score.total_score >= 85:
+            st.info("Playable with room to improve")
+        else:
+            st.warning("Clear optimization opportunities")
+
+    st.caption(
+        f"Carry: {score.carry_score:.1f} | "
+        f"Dispersion: {score.dispersion_score:.1f} | "
+        f"Spin Fit: {score.spin_score:.1f} | "
+        f"Launch Fit: {score.launch_score:.1f} | "
+        f"Strike: {score.strike_score:.1f}"
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    
 def _available_families_from_clubs(selected_clubs: List[str]) -> List[str]:
     clubs = [_normalize_club_id(c) for c in selected_clubs]
 
@@ -1253,6 +1289,8 @@ if analysis_mode == "Single Club Analysis":
         st.markdown(f'<div class="fc-card"><h3>{focus_club} Overview</h3>', unsafe_allow_html=True)
         _render_summary_cards(focus_summary, focus_df)
         st.markdown("</div>", unsafe_allow_html=True)
+    
+        _render_single_setup_score(focus_summary)
 
         if focus_club == "DR":
             _render_driver_setup("single", "Driver Build")

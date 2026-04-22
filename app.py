@@ -736,9 +736,10 @@ def _render_summary_cards(summary, focus_df: pd.DataFrame):
 
 
 def _render_single_setup_score(focus_summary):
+    st.write("Setup score function is running")
     if focus_summary.club_id != "DR":
         return
-
+        
     score = score_driver_setup(focus_summary, label="Current Setup")
 
     st.markdown(
